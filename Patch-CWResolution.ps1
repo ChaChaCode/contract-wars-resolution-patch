@@ -118,78 +118,169 @@ if ($GUI) {
     Add-Type -AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
 
+    # --- Палитра ---
+    # Палитра в стиле UI игры: тёмная сталь + золото CW
+    $clrBack    = [System.Drawing.Color]::FromArgb(38, 41, 43)     # фон окна (тёмно-стальной)
+    $clrPanel   = [System.Drawing.Color]::FromArgb(52, 56, 58)     # поля ввода
+    $clrText    = [System.Drawing.Color]::FromArgb(222, 224, 222)  # основной текст
+    $clrMuted   = [System.Drawing.Color]::FromArgb(148, 152, 150)  # подписи
+    $clrAccent  = [System.Drawing.Color]::FromArgb(198, 156, 60)   # золото CW
+    $clrAccentH = [System.Drawing.Color]::FromArgb(226, 184, 88)   # золото при наведении
+    $clrBtn2    = [System.Drawing.Color]::FromArgb(66, 70, 72)     # второстепенная кнопка (сталь)
+    $clrBtn2H   = [System.Drawing.Color]::FromArgb(84, 89, 91)
+    $clrOk      = [System.Drawing.Color]::FromArgb(150, 200, 120)  # зелёный для лога/готово
+
+    $fontMain  = New-Object System.Drawing.Font("Segoe UI", 9.5)
+    $fontSmall = New-Object System.Drawing.Font("Segoe UI", 8.5)
+
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Contract Wars — Resolution Unlock"
-    $form.Size = New-Object System.Drawing.Size(560, 420)
+    $form.ClientSize = New-Object System.Drawing.Size(560, 480)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = "FixedDialog"
     $form.MaximizeBox = $false
+    $form.BackColor = $clrBack
+    $form.Font = $fontMain
 
+    # --- Шапка ---
+    $lblTitle = New-Object System.Windows.Forms.Label
+    $lblTitle.Text = "CONTRACT WARS"
+    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 17, [System.Drawing.FontStyle]::Bold)
+    $lblTitle.ForeColor = $clrAccent
+    $lblTitle.Location = New-Object System.Drawing.Point(18, 14)
+    $lblTitle.AutoSize = $true
+    $form.Controls.Add($lblTitle)
+
+    $lblSub = New-Object System.Windows.Forms.Label
+    $lblSub.Text = "RESOLUTION UNLOCK — 2K / 4K / 8K"
+    $lblSub.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 9)
+    $lblSub.ForeColor = $clrMuted
+    $lblSub.Location = New-Object System.Drawing.Point(20, 46)
+    $lblSub.AutoSize = $true
+    $form.Controls.Add($lblSub)
+
+    $line = New-Object System.Windows.Forms.Panel
+    $line.BackColor = $clrAccent
+    $line.Location = New-Object System.Drawing.Point(20, 70)
+    $line.Size = New-Object System.Drawing.Size(520, 2)
+    $form.Controls.Add($line)
+
+    # --- Папка игры ---
     $lblPath = New-Object System.Windows.Forms.Label
-    $lblPath.Text = "Папка игры (где лежит CWClient.exe):"
-    $lblPath.Location = New-Object System.Drawing.Point(15, 15)
+    $lblPath.Text = "ПАПКА ИГРЫ  (где лежит CWClient.exe)"
+    $lblPath.Font = $fontSmall
+    $lblPath.ForeColor = $clrMuted
+    $lblPath.Location = New-Object System.Drawing.Point(20, 86)
     $lblPath.AutoSize = $true
     $form.Controls.Add($lblPath)
 
     $txtPath = New-Object System.Windows.Forms.TextBox
-    $txtPath.Location = New-Object System.Drawing.Point(15, 38)
-    $txtPath.Size = New-Object System.Drawing.Size(430, 24)
+    $txtPath.Location = New-Object System.Drawing.Point(20, 107)
+    $txtPath.Size = New-Object System.Drawing.Size(420, 26)
+    $txtPath.BackColor = $clrPanel
+    $txtPath.ForeColor = $clrText
+    $txtPath.BorderStyle = "FixedSingle"
     $form.Controls.Add($txtPath)
 
     $btnBrowse = New-Object System.Windows.Forms.Button
     $btnBrowse.Text = "Обзор..."
-    $btnBrowse.Location = New-Object System.Drawing.Point(455, 36)
-    $btnBrowse.Size = New-Object System.Drawing.Size(75, 26)
+    $btnBrowse.Location = New-Object System.Drawing.Point(452, 105)
+    $btnBrowse.Size = New-Object System.Drawing.Size(88, 27)
+    $btnBrowse.FlatStyle = "Flat"
+    $btnBrowse.FlatAppearance.BorderSize = 0
+    $btnBrowse.BackColor = $clrBtn2
+    $btnBrowse.ForeColor = $clrText
+    $btnBrowse.Cursor = "Hand"
+    $btnBrowse.Add_MouseEnter({ $this.BackColor = $clrBtn2H })
+    $btnBrowse.Add_MouseLeave({ $this.BackColor = $clrBtn2 })
     $form.Controls.Add($btnBrowse)
 
+    # --- Разрешение ---
     $lblRes = New-Object System.Windows.Forms.Label
-    $lblRes.Text = "Максимальное разрешение (потолок):"
-    $lblRes.Location = New-Object System.Drawing.Point(15, 75)
+    $lblRes.Text = "МАКСИМАЛЬНОЕ РАЗРЕШЕНИЕ"
+    $lblRes.Font = $fontSmall
+    $lblRes.ForeColor = $clrMuted
+    $lblRes.Location = New-Object System.Drawing.Point(20, 146)
     $lblRes.AutoSize = $true
     $form.Controls.Add($lblRes)
 
     $cmbRes = New-Object System.Windows.Forms.ComboBox
-    $cmbRes.Location = New-Object System.Drawing.Point(15, 98)
-    $cmbRes.Size = New-Object System.Drawing.Size(300, 24)
+    $cmbRes.Location = New-Object System.Drawing.Point(20, 167)
+    $cmbRes.Size = New-Object System.Drawing.Size(330, 26)
     $cmbRes.DropDownStyle = "DropDownList"
+    $cmbRes.FlatStyle = "Flat"
+    $cmbRes.BackColor = $clrPanel
+    $cmbRes.ForeColor = $clrText
     [void]$cmbRes.Items.Add("7680 x 4320 — универсально, все мониторы")
     [void]$cmbRes.Items.Add("3840 x 2160 — 4K")
     [void]$cmbRes.Items.Add("2560 x 1440 — 2K")
     $cmbRes.SelectedIndex = 0
     $form.Controls.Add($cmbRes)
 
+    # --- Кнопки ---
     $btnPatch = New-Object System.Windows.Forms.Button
     $btnPatch.Text = "ПРИМЕНИТЬ ПАТЧ"
-    $btnPatch.Location = New-Object System.Drawing.Point(15, 140)
-    $btnPatch.Size = New-Object System.Drawing.Size(250, 40)
-    $btnPatch.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnPatch.Location = New-Object System.Drawing.Point(20, 210)
+    $btnPatch.Size = New-Object System.Drawing.Size(330, 46)
+    $btnPatch.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+    $btnPatch.FlatStyle = "Flat"
+    $btnPatch.FlatAppearance.BorderSize = 0
+    $btnPatch.BackColor = $clrAccent
+    $btnPatch.ForeColor = [System.Drawing.Color]::FromArgb(24, 26, 32)
+    $btnPatch.Cursor = "Hand"
+    $btnPatch.Add_MouseEnter({ if ($this.Enabled) { $this.BackColor = $clrAccentH } })
+    $btnPatch.Add_MouseLeave({ $this.BackColor = $clrAccent })
     $form.Controls.Add($btnPatch)
 
     $btnRestore = New-Object System.Windows.Forms.Button
-    $btnRestore.Text = "Откатить патч"
-    $btnRestore.Location = New-Object System.Drawing.Point(280, 140)
-    $btnRestore.Size = New-Object System.Drawing.Size(250, 40)
+    $btnRestore.Text = "Откатить"
+    $btnRestore.Location = New-Object System.Drawing.Point(365, 210)
+    $btnRestore.Size = New-Object System.Drawing.Size(175, 46)
+    $btnRestore.FlatStyle = "Flat"
+    $btnRestore.FlatAppearance.BorderSize = 0
+    $btnRestore.BackColor = $clrBtn2
+    $btnRestore.ForeColor = $clrText
+    $btnRestore.Cursor = "Hand"
+    $btnRestore.Add_MouseEnter({ if ($this.Enabled) { $this.BackColor = $clrBtn2H } })
+    $btnRestore.Add_MouseLeave({ $this.BackColor = $clrBtn2 })
     $form.Controls.Add($btnRestore)
 
+    # --- Прогресс (кастомный, цветной) ---
     $lblProgress = New-Object System.Windows.Forms.Label
     $lblProgress.Text = ""
-    $lblProgress.Location = New-Object System.Drawing.Point(15, 190)
+    $lblProgress.Font = $fontSmall
+    $lblProgress.ForeColor = $clrMuted
+    $lblProgress.Location = New-Object System.Drawing.Point(20, 270)
     $lblProgress.AutoSize = $true
     $form.Controls.Add($lblProgress)
 
-    $progressBar = New-Object System.Windows.Forms.ProgressBar
-    $progressBar.Location = New-Object System.Drawing.Point(15, 210)
-    $progressBar.Size = New-Object System.Drawing.Size(515, 20)
-    $progressBar.Minimum = 0
-    $progressBar.Maximum = 100
-    $form.Controls.Add($progressBar)
+    $pbTrack = New-Object System.Windows.Forms.Panel
+    $pbTrack.Location = New-Object System.Drawing.Point(20, 292)
+    $pbTrack.Size = New-Object System.Drawing.Size(520, 14)
+    $pbTrack.BackColor = $clrPanel
+    $form.Controls.Add($pbTrack)
 
+    $pbFill = New-Object System.Windows.Forms.Panel
+    $pbFill.Location = New-Object System.Drawing.Point(0, 0)
+    $pbFill.Size = New-Object System.Drawing.Size(0, 14)
+    $pbFill.BackColor = $clrAccent
+    $pbTrack.Controls.Add($pbFill)
+
+    function Set-ProgressPct($pct) {
+        $pbFill.Width = [int]($pbTrack.Width * $pct / 100)
+    }
+
+    # --- Журнал ---
     $txtLog = New-Object System.Windows.Forms.TextBox
-    $txtLog.Location = New-Object System.Drawing.Point(15, 240)
-    $txtLog.Size = New-Object System.Drawing.Size(515, 130)
+    $txtLog.Location = New-Object System.Drawing.Point(20, 318)
+    $txtLog.Size = New-Object System.Drawing.Size(520, 145)
     $txtLog.Multiline = $true
     $txtLog.ReadOnly = $true
     $txtLog.ScrollBars = "Vertical"
+    $txtLog.BackColor = [System.Drawing.Color]::FromArgb(16, 18, 22)
+    $txtLog.ForeColor = $clrOk
+    $txtLog.BorderStyle = "FixedSingle"
+    $txtLog.Font = New-Object System.Drawing.Font("Consolas", 9)
     $form.Controls.Add($txtLog)
 
     function Add-Log($msg) {
@@ -221,25 +312,29 @@ if ($GUI) {
         }
         Add-Log "[*] DLL: $dll"
         $btnPatch.Enabled = $false; $btnRestore.Enabled = $false; $btnBrowse.Enabled = $false
+        $lblProgress.ForeColor = $clrMuted
         $lblProgress.Text = "Применение патча: сканирование DLL..."
         try {
             $r = Invoke-CWPatch -Dll $dll -W $w -H $h -OnProgress {
                 param($pct)
-                $progressBar.Value = $pct
+                Set-ProgressPct $pct
                 $lblProgress.Text = "Применение патча: $pct%"
                 [System.Windows.Forms.Application]::DoEvents()
             }
             if ($r.ok) {
                 $lblProgress.Text = "Готово!"
+                $lblProgress.ForeColor = $clrOk
                 Add-Log "[+] $($r.message)"
             } else {
                 $lblProgress.Text = "Ошибка — файл не изменён."
-                $progressBar.Value = 0
+                $lblProgress.ForeColor = [System.Drawing.Color]::FromArgb(235, 100, 100)
+                Set-ProgressPct 0
                 Add-Log "[!] $($r.message)"
             }
         } catch {
             $lblProgress.Text = "Ошибка."
-            $progressBar.Value = 0
+            $lblProgress.ForeColor = [System.Drawing.Color]::FromArgb(235, 100, 100)
+            Set-ProgressPct 0
             Add-Log "[!] Ошибка: $($_.Exception.Message)"
         } finally {
             $btnPatch.Enabled = $true; $btnRestore.Enabled = $true; $btnBrowse.Enabled = $true
