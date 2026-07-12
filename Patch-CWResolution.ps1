@@ -112,7 +112,7 @@ function Invoke-CWPatch {
     Write-Int32 $bytes ($a + 31) $H   # FixResolution: аргумент SetResolution height
     Write-Int32 $bytes ($bOff + 1) $W # SettingsGUI: потолок списка разрешений
     [IO.File]::WriteAllBytes($Dll, $bytes)
-    return @{ ok = $true; message = "${backupMsg}Патч применён! Новый потолок: ${W}x${H}.`r`nЗапустите игру через CWClient.exe (НЕ через лаунчер) и выберите разрешение в настройках игры." }
+    return @{ ok = $true; message = "${backupMsg}Патч применён! Новый потолок: ${W}x${H}.`r`nЗапустите игру и выберите нужное разрешение в настройках." }
 }
 
 function Invoke-CWRestore {
@@ -123,6 +123,35 @@ function Invoke-CWRestore {
     }
     Copy-Item $backup $Dll -Force
     return @{ ok = $true; message = "Оригинальная DLL восстановлена из бэкапа." }
+}
+
+# Диагностика: собирает текст с кандидатами участков кода для отправки разработчику.
+function Get-CWDiagnostics {
+    param([string]$Dll)
+    $b = [IO.File]::ReadAllBytes($Dll)
+    $lines = @()
+    $lines += "DLL: $Dll"
+    $lines += "Размер: $($b.Length) байт"
+    # счётчики паттернов
+    $ca = 0; $cb = 0
+    for ($i = 5; $i -le $b.Length - 41; $i++) {
+        if ($b[$i] -ne 0x20) { continue }
+        if (Test-PatternA $b $i) { $ca++ }
+        if (Test-PatternB $b $i) { $cb++ }
+    }
+    $lines += "Паттерны: A=$ca, B=$cb"
+    $lines += "--- Кандидаты (ldc.i4 <разрешение> + переход) ---"
+    $targets = @(800, 1280, 1360, 1366, 1440, 1600, 1680, 1920, 2048, 2560, 3840, 7680)
+    for ($i = 12; $i -le $b.Length - 10; $i++) {
+        if ($b[$i] -ne 0x20) { continue }
+        $v = [BitConverter]::ToInt32($b, $i + 1)
+        if ($targets -notcontains $v) { continue }
+        $next = $b[$i + 5]
+        if ($next -notin @(0x3D,0x3E,0x3F,0x40,0x41,0x2C,0x2D,0x30,0x31,0x32,0x33)) { continue }
+        $hex = ($b[($i-12)..($i+9)] | ForEach-Object { "{0:X2}" -f $_ }) -join ' '
+        $lines += ("off=0x{0:X}  val={1}  jmp=0x{2:X2}  :: {3}" -f $i, $v, $next, $hex)
+    }
+    return ($lines -join "`r`n")
 }
 
 # ============================ GUI ============================
@@ -148,7 +177,7 @@ if ($GUI) {
 
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Contract Wars — Resolution Unlock"
-    $form.ClientSize = New-Object System.Drawing.Size(560, 480)
+    $form.ClientSize = New-Object System.Drawing.Size(560, 520)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = "FixedDialog"
     $form.MaximizeBox = $false
@@ -286,7 +315,7 @@ if ($GUI) {
     # --- Журнал ---
     $txtLog = New-Object System.Windows.Forms.TextBox
     $txtLog.Location = New-Object System.Drawing.Point(20, 318)
-    $txtLog.Size = New-Object System.Drawing.Size(520, 145)
+    $txtLog.Size = New-Object System.Drawing.Size(520, 118)
     $txtLog.Multiline = $true
     $txtLog.ReadOnly = $true
     $txtLog.ScrollBars = "Vertical"
@@ -299,6 +328,68 @@ if ($GUI) {
     function Add-Log($msg) {
         $txtLog.AppendText("$msg`r`n")
     }
+
+    # --- Нижняя панель: копирование лога + контакт ---
+    $btnCopy = New-Object System.Windows.Forms.Button
+    $btnCopy.Text = "Скопировать лог"
+    $btnCopy.Location = New-Object System.Drawing.Point(20, 446)
+    $btnCopy.Size = New-Object System.Drawing.Size(150, 30)
+    $btnCopy.FlatStyle = "Flat"
+    $btnCopy.FlatAppearance.BorderSize = 0
+    $btnCopy.BackColor = $clrBtn2
+    $btnCopy.ForeColor = $clrText
+    $btnCopy.Cursor = "Hand"
+    $btnCopy.Add_MouseEnter({ $this.BackColor = $clrBtn2H })
+    $btnCopy.Add_MouseLeave({ $this.BackColor = $clrBtn2 })
+    $btnCopy.Add_Click({
+        if ($txtLog.Text.Trim()) {
+            [System.Windows.Forms.Clipboard]::SetText($txtLog.Text)
+            $lblCopied.Text = "Лог скопирован в буфер обмена"
+        } else {
+            $lblCopied.Text = "Лог пуст"
+        }
+    })
+    $form.Controls.Add($btnCopy)
+
+    $btnDiag = New-Object System.Windows.Forms.Button
+    $btnDiag.Text = "Диагностика"
+    $btnDiag.Location = New-Object System.Drawing.Point(178, 446)
+    $btnDiag.Size = New-Object System.Drawing.Size(120, 30)
+    $btnDiag.FlatStyle = "Flat"
+    $btnDiag.FlatAppearance.BorderSize = 0
+    $btnDiag.BackColor = $clrBtn2
+    $btnDiag.ForeColor = $clrText
+    $btnDiag.Cursor = "Hand"
+    $btnDiag.Add_MouseEnter({ $this.BackColor = $clrBtn2H })
+    $btnDiag.Add_MouseLeave({ $this.BackColor = $clrBtn2 })
+    $form.Controls.Add($btnDiag)
+
+    $lblCopied = New-Object System.Windows.Forms.Label
+    $lblCopied.Text = ""
+    $lblCopied.Font = $fontSmall
+    $lblCopied.ForeColor = $clrOk
+    $lblCopied.Location = New-Object System.Drawing.Point(306, 453)
+    $lblCopied.AutoSize = $true
+    $form.Controls.Add($lblCopied)
+
+    # --- Контакт для обращений ---
+    $lblContactPre = New-Object System.Windows.Forms.Label
+    $lblContactPre.Text = "Ошибка? Скопируйте лог и напишите:"
+    $lblContactPre.Font = $fontSmall
+    $lblContactPre.ForeColor = $clrMuted
+    $lblContactPre.Location = New-Object System.Drawing.Point(20, 490)
+    $lblContactPre.AutoSize = $true
+    $form.Controls.Add($lblContactPre)
+
+    $lnkTg = New-Object System.Windows.Forms.LinkLabel
+    $lnkTg.Text = "t.me/Moxy1337"
+    $lnkTg.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+    $lnkTg.LinkColor = $clrAccent
+    $lnkTg.ActiveLinkColor = $clrAccentH
+    $lnkTg.Location = New-Object System.Drawing.Point(232, 490)
+    $lnkTg.AutoSize = $true
+    $lnkTg.Add_LinkClicked({ Start-Process "https://t.me/Moxy1337" })
+    $form.Controls.Add($lnkTg)
 
     function Get-DllFromForm {
         $p = $txtPath.Text.Trim()
@@ -362,6 +453,20 @@ if ($GUI) {
             if ($r.ok) { Add-Log "[+] $($r.message)" } else { Add-Log "[!] $($r.message)" }
         } catch {
             Add-Log "[!] Ошибка: $($_.Exception.Message)"
+        }
+    })
+
+    $btnDiag.Add_Click({
+        $dll = Get-DllFromForm
+        if (-not $dll) { return }
+        try {
+            $diag = Get-CWDiagnostics -Dll $dll
+            Add-Log "[*] === ДИАГНОСТИКА (скопируйте лог и пришлите в Telegram) ==="
+            Add-Log $diag
+            [System.Windows.Forms.Clipboard]::SetText($txtLog.Text)
+            $lblCopied.Text = "Диагностика готова и скопирована"
+        } catch {
+            Add-Log "[!] Ошибка диагностики: $($_.Exception.Message)"
         }
     })
 
