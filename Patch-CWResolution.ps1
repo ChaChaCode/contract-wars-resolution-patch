@@ -64,17 +64,25 @@ function Write-Int32($b, $pos, $val) {
 }
 
 # Применяет патч. Возвращает @{ ok = $true/$false; message = "..." }
+# $OnProgress — колбэк (0..100), вызывается по ходу сканирования DLL.
 function Invoke-CWPatch {
-    param([string]$Dll, [int]$W, [int]$H)
+    param([string]$Dll, [int]$W, [int]$H, [scriptblock]$OnProgress = $null)
     if ($W -lt 800 -or $W -gt 16384 -or $H -lt 600 -or $H -gt 16384) {
         return @{ ok = $false; message = "Недопустимые значения ширины/высоты." }
     }
+    if ($OnProgress) { & $OnProgress 0 }
     $bytes = [IO.File]::ReadAllBytes($Dll)
     $hitsA = @(); $hitsB = @()
-    for ($i = 5; $i -le $bytes.Length - 41; $i++) {
+    $total = $bytes.Length - 41
+    $step = [Math]::Max(1, [int]($total / 100))
+    for ($i = 5; $i -le $total; $i++) {
+        if ($OnProgress -and ($i % $step) -eq 0) { & $OnProgress ([int](100 * $i / $total)) }
+        # Быстрая предпроверка: оба паттерна начинаются с ldc.i4 (0x20) + переход (0x3D) через 5 байт
+        if ($bytes[$i] -ne 0x20 -or $bytes[$i+5] -ne 0x3D) { continue }
         if (Test-PatternA $bytes $i) { $hitsA += $i }
         if (Test-PatternB $bytes $i) { $hitsB += $i }
     }
+    if ($OnProgress) { & $OnProgress 100 }
     if ($hitsA.Count -ne 1 -or $hitsB.Count -ne 1) {
         return @{ ok = $false; message = "Ожидаемые участки кода не найдены однозначно (A=$($hitsA.Count), B=$($hitsB.Count)). Возможно, версия клиента отличается. Файл не изменён." }
     }
@@ -163,9 +171,22 @@ if ($GUI) {
     $btnRestore.Size = New-Object System.Drawing.Size(250, 40)
     $form.Controls.Add($btnRestore)
 
+    $lblProgress = New-Object System.Windows.Forms.Label
+    $lblProgress.Text = ""
+    $lblProgress.Location = New-Object System.Drawing.Point(15, 190)
+    $lblProgress.AutoSize = $true
+    $form.Controls.Add($lblProgress)
+
+    $progressBar = New-Object System.Windows.Forms.ProgressBar
+    $progressBar.Location = New-Object System.Drawing.Point(15, 210)
+    $progressBar.Size = New-Object System.Drawing.Size(515, 20)
+    $progressBar.Minimum = 0
+    $progressBar.Maximum = 100
+    $form.Controls.Add($progressBar)
+
     $txtLog = New-Object System.Windows.Forms.TextBox
-    $txtLog.Location = New-Object System.Drawing.Point(15, 195)
-    $txtLog.Size = New-Object System.Drawing.Size(515, 175)
+    $txtLog.Location = New-Object System.Drawing.Point(15, 240)
+    $txtLog.Size = New-Object System.Drawing.Size(515, 130)
     $txtLog.Multiline = $true
     $txtLog.ReadOnly = $true
     $txtLog.ScrollBars = "Vertical"
@@ -199,11 +220,29 @@ if ($GUI) {
             default { 7680, 4320 }
         }
         Add-Log "[*] DLL: $dll"
+        $btnPatch.Enabled = $false; $btnRestore.Enabled = $false; $btnBrowse.Enabled = $false
+        $lblProgress.Text = "Применение патча: сканирование DLL..."
         try {
-            $r = Invoke-CWPatch -Dll $dll -W $w -H $h
-            if ($r.ok) { Add-Log "[+] $($r.message)" } else { Add-Log "[!] $($r.message)" }
+            $r = Invoke-CWPatch -Dll $dll -W $w -H $h -OnProgress {
+                param($pct)
+                $progressBar.Value = $pct
+                $lblProgress.Text = "Применение патча: $pct%"
+                [System.Windows.Forms.Application]::DoEvents()
+            }
+            if ($r.ok) {
+                $lblProgress.Text = "Готово!"
+                Add-Log "[+] $($r.message)"
+            } else {
+                $lblProgress.Text = "Ошибка — файл не изменён."
+                $progressBar.Value = 0
+                Add-Log "[!] $($r.message)"
+            }
         } catch {
+            $lblProgress.Text = "Ошибка."
+            $progressBar.Value = 0
             Add-Log "[!] Ошибка: $($_.Exception.Message)"
+        } finally {
+            $btnPatch.Enabled = $true; $btnRestore.Enabled = $true; $btnBrowse.Enabled = $true
         }
     })
 
@@ -242,7 +281,11 @@ Write-Host "[*] Найдена DLL: $dll"
 if ($Restore) {
     $r = Invoke-CWRestore -Dll $dll
 } else {
-    $r = Invoke-CWPatch -Dll $dll -W $MaxWidth -H $MaxHeight
+    $r = Invoke-CWPatch -Dll $dll -W $MaxWidth -H $MaxHeight -OnProgress {
+        param($pct)
+        Write-Progress -Activity "Применение патча" -Status "$pct%" -PercentComplete $pct
+    }
+    Write-Progress -Activity "Применение патча" -Completed
 }
 if ($r.ok) {
     Write-Host "[+] $($r.message)" -ForegroundColor Green
