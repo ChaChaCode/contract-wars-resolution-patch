@@ -1,3 +1,2 @@
 @echo off
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Patch-CWResolution.ps1" %*
-pause
+start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0Patch-CWResolution.ps1" -GUI

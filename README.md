@@ -17,15 +17,18 @@
 ## Установка
 
 1. Скачайте файлы патча (Code → Download ZIP) и распакуйте куда угодно.
-2. Запустите **PATCH.bat** двойным кликом.
-   - Если игра установлена не в `C:\Games\CWClient`, запустите из консоли с указанием пути:
-     `powershell -ExecutionPolicy Bypass -File Patch-CWResolution.ps1 -GamePath "D:\Path\To\CWClient"`
+2. Запустите **PATCH.bat** двойным кликом — откроется окно программы:
+   - папка игры находится автоматически (или выберите её кнопкой **«Обзор...»** — нужна папка, где лежит `CWClient.exe`);
+   - выберите потолок разрешения (по умолчанию — универсальный, подходит для любого монитора вплоть до 8K);
+   - нажмите **«ПРИМЕНИТЬ ПАТЧ»**.
 3. Запустите игру через **CWClient.exe** (не через лаунчер — он может перекачать файл и снять патч).
 4. В настройках игры выберите нужное разрешение и примените. Оно сохранится в вашем профиле.
 
+Для консоли: `powershell -ExecutionPolicy Bypass -File Patch-CWResolution.ps1 -GamePath "D:\Path\To\CWClient"` (параметры `-MaxWidth`, `-MaxHeight`, `-Restore`).
+
 ## Откат
 
-Запустите **RESTORE.bat** — вернётся оригинальная DLL из бэкапа (`Assembly-CSharp.dll.orig.bak`), который патч создаёт автоматически.
+Нажмите **«Откатить патч»** в окне программы (или запустите **RESTORE.bat**) — вернётся оригинальная DLL из бэкапа (`Assembly-CSharp.dll.orig.bak`), который патч создаёт автоматически.
 
 ## Как это работает
 
@@ -41,7 +44,7 @@
 
 ## English
 
-**Install:** download this repo, run `PATCH.bat` (or `powershell -ExecutionPolicy Bypass -File Patch-CWResolution.ps1 -GamePath "D:\CWClient"` if the game is not in `C:\Games\CWClient`). Then launch the game via `CWClient.exe` (not the launcher — it may re-download the DLL) and pick your resolution in the in-game settings.
+**Install:** download this repo and run `PATCH.bat` — a window opens where you pick the game folder (the one containing `CWClient.exe`, auto-detected when possible), choose the resolution cap, and click the patch button. CLI is also available: `powershell -ExecutionPolicy Bypass -File Patch-CWResolution.ps1 -GamePath "D:\CWClient"`. Then launch the game via `CWClient.exe` (not the launcher — it may re-download the DLL) and pick your resolution in the in-game settings.
 
 **Uninstall:** run `RESTORE.bat` — restores the original DLL from the automatic backup.
 
