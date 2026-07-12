@@ -48,12 +48,17 @@ function Test-PatternA($b, $i) {
 }
 
 # --- Паттерн B: фильтр списка разрешений в меню настроек (SettingsGUI) ---
-# IL: ... call Resolution.get_width; ldc.i4 W; bgt +16  (перед этим в пределах 48 байт есть ldc.i4 800)
+# IL: ... call Resolution.get_width; ldc.i4 W (1024..8192); bgt +N (малое смещение)
+# Перед этим в пределах 48 байт — сравнение с 800: ldc.i4 800; blt.un (20 20 03 00 00 3F).
+# Смещение перехода не фиксируется — оно отличается между сборками клиента.
 function Test-PatternB($b, $j) {
-    if (-not ($b[$j] -eq 0x20 -and $b[$j+5] -eq 0x3D -and $b[$j+6] -eq 0x16 -and $b[$j+7] -eq 0 -and $b[$j+8] -eq 0 -and $b[$j+9] -eq 0 -and
+    if (-not ($b[$j] -eq 0x20 -and $b[$j+5] -eq 0x3D -and
+              $b[$j+6] -ge 0x05 -and $b[$j+6] -le 0x7F -and $b[$j+7] -eq 0 -and $b[$j+8] -eq 0 -and $b[$j+9] -eq 0 -and
               $b[$j-5] -eq 0x28 -and $b[$j-1] -eq 0x0A)) { return $false }
+    $v = [BitConverter]::ToInt32($b, $j+1)
+    if ($v -lt 1024 -or $v -gt 16384) { return $false }
     for ($k = [Math]::Max(0, $j-48); $k -lt $j; $k++) {
-        if ($b[$k] -eq 0x20 -and $b[$k+1] -eq 0x20 -and $b[$k+2] -eq 0x03 -and $b[$k+3] -eq 0 -and $b[$k+4] -eq 0) { return $true }
+        if ($b[$k] -eq 0x20 -and $b[$k+1] -eq 0x20 -and $b[$k+2] -eq 0x03 -and $b[$k+3] -eq 0 -and $b[$k+4] -eq 0 -and $b[$k+5] -eq 0x3F) { return $true }
     }
     return $false
 }
