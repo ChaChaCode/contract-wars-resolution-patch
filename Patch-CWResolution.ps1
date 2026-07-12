@@ -47,20 +47,27 @@ function Test-PatternA($b, $i) {
             $b[$i+35] -eq 0x28 -and $b[$i+38] -eq 0 -and $b[$i+39] -eq 0x0A)
 }
 
-# --- Паттерн B: фильтр списка разрешений в меню настроек (SettingsGUI) ---
-# IL: ... call Resolution.get_width; ldc.i4 W (1024..8192); bgt +N (малое смещение)
-# Перед этим в пределах 48 байт — сравнение с 800: ldc.i4 800; blt.un (20 20 03 00 00 3F).
-# Смещение перехода не фиксируется — оно отличается между сборками клиента.
+# --- Паттерн B: верхний фильтр списка разрешений в меню настроек (SettingsGUI) ---
+# Ищем: ldc.i4 <ширина 1024..16384> сразу за которым идёт условный переход
+# (bgt/ble/blt/bge в long-форме 0x3D..0x41 или short 0x2C..0x33).
+# Подтверждаем контекст двумя признаками в окне ±64 байта:
+#   * рядом есть call get_width  (28 xx xx xx 0A)
+#   * рядом есть нижний порог 800  (ldc.i4 800 = 20 20 03 00 00)
+# Ничего не привязано к точным смещениям — устойчиво к разным сборкам клиента.
 function Test-PatternB($b, $j) {
-    if (-not ($b[$j] -eq 0x20 -and $b[$j+5] -eq 0x3D -and
-              $b[$j+6] -ge 0x05 -and $b[$j+6] -le 0x7F -and $b[$j+7] -eq 0 -and $b[$j+8] -eq 0 -and $b[$j+9] -eq 0 -and
-              $b[$j-5] -eq 0x28 -and $b[$j-1] -eq 0x0A)) { return $false }
+    if ($b[$j] -ne 0x20) { return $false }
+    $jmp = $b[$j+5]
+    $isJump = ($jmp -ge 0x3D -and $jmp -le 0x41) -or ($jmp -ge 0x2C -and $jmp -le 0x33)
+    if (-not $isJump) { return $false }
     $v = [BitConverter]::ToInt32($b, $j+1)
     if ($v -lt 1024 -or $v -gt 16384) { return $false }
-    for ($k = [Math]::Max(0, $j-48); $k -lt $j; $k++) {
-        if ($b[$k] -eq 0x20 -and $b[$k+1] -eq 0x20 -and $b[$k+2] -eq 0x03 -and $b[$k+3] -eq 0 -and $b[$k+4] -eq 0 -and $b[$k+5] -eq 0x3F) { return $true }
+    $has800 = $false; $hasCall = $false
+    $lo = [Math]::Max(0, $j-64); $hi = [Math]::Min($b.Length-6, $j+64)
+    for ($k = $lo; $k -le $hi; $k++) {
+        if ($b[$k] -eq 0x20 -and $b[$k+1] -eq 0x20 -and $b[$k+2] -eq 0x03 -and $b[$k+3] -eq 0 -and $b[$k+4] -eq 0) { $has800 = $true }
+        if ($b[$k] -eq 0x28 -and $b[$k+4] -eq 0x0A) { $hasCall = $true }
     }
-    return $false
+    return ($has800 -and $hasCall)
 }
 
 function Write-Int32($b, $pos, $val) {
@@ -82,8 +89,9 @@ function Invoke-CWPatch {
     $step = [Math]::Max(1, [int]($total / 100))
     for ($i = 5; $i -le $total; $i++) {
         if ($OnProgress -and ($i % $step) -eq 0) { & $OnProgress ([int](100 * $i / $total)) }
-        # Быстрая предпроверка: оба паттерна начинаются с ldc.i4 (0x20) + переход (0x3D) через 5 байт
-        if ($bytes[$i] -ne 0x20 -or $bytes[$i+5] -ne 0x3D) { continue }
+        # Быстрый отсев: оба паттерна начинаются с ldc.i4 (opcode 0x20). Переход НЕ проверяем
+        # здесь — его форма (long/short) отличается между сборками и обрабатывается в Test-PatternB.
+        if ($bytes[$i] -ne 0x20) { continue }
         if (Test-PatternA $bytes $i) { $hitsA += $i }
         if (Test-PatternB $bytes $i) { $hitsB += $i }
     }
