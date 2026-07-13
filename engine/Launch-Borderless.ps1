@@ -45,4 +45,8 @@ if (Test-Path $key) {
 }
 
 # --- запуск с borderless-флагом движка Unity ---
-Start-Process $exe -ArgumentList "-popupwindow","-screen-fullscreen","0","-screen-width","$w","-screen-height","$h"
+# ВАЖНО: рабочая директория ДОЛЖНА быть папкой игры (лаунчер делает так же через
+# Directory.GetCurrentDirectory()). Иначе игра не находит данные и профиль не грузится.
+# -popupwindow: окно без рамки (borderless) на уровне движка. -force-gfx-st: как в лаунчере.
+$gameDir = Split-Path -Parent $exe
+Start-Process $exe -WorkingDirectory $gameDir -ArgumentList "-force-gfx-st","-popupwindow","-screen-fullscreen","0","-screen-width","$w","-screen-height","$h"
