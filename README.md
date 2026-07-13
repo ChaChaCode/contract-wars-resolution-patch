@@ -1,4 +1,4 @@
-# Contract Wars — Tweaks Patch
+﻿# Contract Wars — Tweaks Patch
 
 [![Download](https://img.shields.io/badge/%E2%AC%87%20%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC%20%2F%20DOWNLOAD-latest-c69c3c?style=for-the-badge)](https://github.com/ChaChaCode/contract-wars-resolution-patch/releases/latest)
 
