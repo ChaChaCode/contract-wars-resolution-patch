@@ -172,23 +172,25 @@ if ($GUI) {
     . (Join-Path $cwScriptDir "CWPatchCore.ps1")
 
     # --- Палитра ---
-    # Палитра в стиле UI игры: тёмная сталь + золото CW
-    $clrBack    = [System.Drawing.Color]::FromArgb(38, 41, 43)     # фон окна (тёмно-стальной)
-    $clrPanel   = [System.Drawing.Color]::FromArgb(52, 56, 58)     # поля ввода
-    $clrText    = [System.Drawing.Color]::FromArgb(222, 224, 222)  # основной текст
-    $clrMuted   = [System.Drawing.Color]::FromArgb(148, 152, 150)  # подписи
-    $clrAccent  = [System.Drawing.Color]::FromArgb(198, 156, 60)   # золото CW
-    $clrAccentH = [System.Drawing.Color]::FromArgb(226, 184, 88)   # золото при наведении
-    $clrBtn2    = [System.Drawing.Color]::FromArgb(66, 70, 72)     # второстепенная кнопка (сталь)
-    $clrBtn2H   = [System.Drawing.Color]::FromArgb(84, 89, 91)
-    $clrOk      = [System.Drawing.Color]::FromArgb(150, 200, 120)  # зелёный для лога/готово
+    # Чистый светлый минимализм: белый фон, графитовый текст, тонкие серые границы,
+    # один сдержанный тёмный акцент. Без ярких цветов.
+    $clrBack    = [System.Drawing.Color]::FromArgb(255, 255, 255)  # фон окна (белый)
+    $clrPanel   = [System.Drawing.Color]::FromArgb(248, 249, 250)  # поля ввода (почти белый)
+    $clrBorder  = [System.Drawing.Color]::FromArgb(222, 224, 227)  # тонкие границы
+    $clrText    = [System.Drawing.Color]::FromArgb(28, 30, 33)      # основной текст (графит)
+    $clrMuted   = [System.Drawing.Color]::FromArgb(140, 144, 150)  # подписи (серый)
+    $clrAccent  = [System.Drawing.Color]::FromArgb(28, 30, 33)      # акцент = графит
+    $clrAccentH = [System.Drawing.Color]::FromArgb(58, 62, 68)      # акцент при наведении
+    $clrBtn2    = [System.Drawing.Color]::FromArgb(244, 245, 247)  # второстепенная кнопка
+    $clrBtn2H   = [System.Drawing.Color]::FromArgb(233, 235, 238)
+    $clrOk      = [System.Drawing.Color]::FromArgb(60, 64, 70)      # текст лога (тёмно-серый)
 
     $fontMain  = New-Object System.Drawing.Font("Segoe UI", 9.5)
     $fontSmall = New-Object System.Drawing.Font("Segoe UI", 8.5)
 
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Contract Wars — Tweaks Patch"
-    $form.ClientSize = New-Object System.Drawing.Size(560, 640)
+    $form.ClientSize = New-Object System.Drawing.Size(560, 664)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = "FixedDialog"
     $form.MaximizeBox = $false
@@ -197,25 +199,25 @@ if ($GUI) {
 
     # --- Шапка ---
     $lblTitle = New-Object System.Windows.Forms.Label
-    $lblTitle.Text = "CONTRACT WARS"
-    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 17, [System.Drawing.FontStyle]::Bold)
-    $lblTitle.ForeColor = $clrAccent
+    $lblTitle.Text = "Contract Wars"
+    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI Semilight", 20)
+    $lblTitle.ForeColor = $clrText
     $lblTitle.Location = New-Object System.Drawing.Point(18, 14)
     $lblTitle.AutoSize = $true
     $form.Controls.Add($lblTitle)
 
     $lblSub = New-Object System.Windows.Forms.Label
-    $lblSub.Text = "TWEAKS — РАЗРЕШЕНИЕ · КЛИК · АВТОСПАВН"
-    $lblSub.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 9)
+    $lblSub.Text = "Tweaks Patch"
+    $lblSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $lblSub.ForeColor = $clrMuted
-    $lblSub.Location = New-Object System.Drawing.Point(20, 46)
+    $lblSub.Location = New-Object System.Drawing.Point(20, 50)
     $lblSub.AutoSize = $true
     $form.Controls.Add($lblSub)
 
     $line = New-Object System.Windows.Forms.Panel
-    $line.BackColor = $clrAccent
-    $line.Location = New-Object System.Drawing.Point(20, 70)
-    $line.Size = New-Object System.Drawing.Size(520, 2)
+    $line.BackColor = $clrBorder
+    $line.Location = New-Object System.Drawing.Point(20, 72)
+    $line.Size = New-Object System.Drawing.Size(520, 1)
     $form.Controls.Add($line)
 
     # --- Папка игры ---
@@ -240,7 +242,8 @@ if ($GUI) {
     $btnBrowse.Location = New-Object System.Drawing.Point(452, 105)
     $btnBrowse.Size = New-Object System.Drawing.Size(88, 27)
     $btnBrowse.FlatStyle = "Flat"
-    $btnBrowse.FlatAppearance.BorderSize = 0
+    $btnBrowse.FlatAppearance.BorderSize = 1
+    $btnBrowse.FlatAppearance.BorderColor = $clrBorder
     $btnBrowse.BackColor = $clrBtn2
     $btnBrowse.ForeColor = $clrText
     $btnBrowse.Cursor = "Hand"
@@ -304,7 +307,7 @@ if ($GUI) {
     $chkAuto.Text = "Автоспавн — сразу в бой без клика (DM, Team Elimination)"
     $chkAuto.Location = New-Object System.Drawing.Point(20, 272)
     $chkAuto.Size = New-Object System.Drawing.Size(520, 22)
-    $chkAuto.Checked = $false
+    $chkAuto.Checked = $true
     $chkAuto.ForeColor = $clrText
     $chkAuto.BackColor = $clrBack
     $chkAuto.FlatStyle = "Flat"
@@ -314,22 +317,32 @@ if ($GUI) {
     $chkFov.Text = "FOV-ползунок и выбор экрана (в настройках игры)"
     $chkFov.Location = New-Object System.Drawing.Point(20, 296)
     $chkFov.Size = New-Object System.Drawing.Size(520, 22)
-    $chkFov.Checked = $false
+    $chkFov.Checked = $true
     $chkFov.ForeColor = $clrText
     $chkFov.BackColor = $clrBack
     $chkFov.FlatStyle = "Flat"
     $form.Controls.Add($chkFov)
 
+    $chkNoBob = New-Object System.Windows.Forms.CheckBox
+    $chkNoBob.Text = "Отключить тряску: движение, оружие, пули и взрывы"
+    $chkNoBob.Location = New-Object System.Drawing.Point(20, 320)
+    $chkNoBob.Size = New-Object System.Drawing.Size(520, 22)
+    $chkNoBob.Checked = $true
+    $chkNoBob.ForeColor = $clrText
+    $chkNoBob.BackColor = $clrBack
+    $chkNoBob.FlatStyle = "Flat"
+    $form.Controls.Add($chkNoBob)
+
     # --- Кнопки ---
     $btnPatch = New-Object System.Windows.Forms.Button
-    $btnPatch.Text = "ПРИМЕНИТЬ ПАТЧ"
-    $btnPatch.Location = New-Object System.Drawing.Point(20, 330)
+    $btnPatch.Text = "Применить патч"
+    $btnPatch.Location = New-Object System.Drawing.Point(20, 354)
     $btnPatch.Size = New-Object System.Drawing.Size(330, 46)
-    $btnPatch.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+    $btnPatch.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 11)
     $btnPatch.FlatStyle = "Flat"
     $btnPatch.FlatAppearance.BorderSize = 0
     $btnPatch.BackColor = $clrAccent
-    $btnPatch.ForeColor = [System.Drawing.Color]::FromArgb(24, 26, 32)
+    $btnPatch.ForeColor = [System.Drawing.Color]::White
     $btnPatch.Cursor = "Hand"
     $btnPatch.Add_MouseEnter({ if ($this.Enabled) { $this.BackColor = $clrAccentH } })
     $btnPatch.Add_MouseLeave({ $this.BackColor = $clrAccent })
@@ -337,10 +350,11 @@ if ($GUI) {
 
     $btnRestore = New-Object System.Windows.Forms.Button
     $btnRestore.Text = "Откатить"
-    $btnRestore.Location = New-Object System.Drawing.Point(365, 330)
+    $btnRestore.Location = New-Object System.Drawing.Point(365, 354)
     $btnRestore.Size = New-Object System.Drawing.Size(175, 46)
     $btnRestore.FlatStyle = "Flat"
-    $btnRestore.FlatAppearance.BorderSize = 0
+    $btnRestore.FlatAppearance.BorderSize = 1
+    $btnRestore.FlatAppearance.BorderColor = $clrBorder
     $btnRestore.BackColor = $clrBtn2
     $btnRestore.ForeColor = $clrText
     $btnRestore.Cursor = "Hand"
@@ -353,12 +367,12 @@ if ($GUI) {
     $lblProgress.Text = ""
     $lblProgress.Font = $fontSmall
     $lblProgress.ForeColor = $clrMuted
-    $lblProgress.Location = New-Object System.Drawing.Point(20, 390)
+    $lblProgress.Location = New-Object System.Drawing.Point(20, 414)
     $lblProgress.AutoSize = $true
     $form.Controls.Add($lblProgress)
 
     $pbTrack = New-Object System.Windows.Forms.Panel
-    $pbTrack.Location = New-Object System.Drawing.Point(20, 412)
+    $pbTrack.Location = New-Object System.Drawing.Point(20, 436)
     $pbTrack.Size = New-Object System.Drawing.Size(520, 14)
     $pbTrack.BackColor = $clrPanel
     $form.Controls.Add($pbTrack)
@@ -375,12 +389,12 @@ if ($GUI) {
 
     # --- Журнал ---
     $txtLog = New-Object System.Windows.Forms.TextBox
-    $txtLog.Location = New-Object System.Drawing.Point(20, 438)
+    $txtLog.Location = New-Object System.Drawing.Point(20, 462)
     $txtLog.Size = New-Object System.Drawing.Size(520, 118)
     $txtLog.Multiline = $true
     $txtLog.ReadOnly = $true
     $txtLog.ScrollBars = "Vertical"
-    $txtLog.BackColor = [System.Drawing.Color]::FromArgb(16, 18, 22)
+    $txtLog.BackColor = $clrPanel
     $txtLog.ForeColor = $clrOk
     $txtLog.BorderStyle = "FixedSingle"
     $txtLog.Font = New-Object System.Drawing.Font("Consolas", 9)
@@ -393,10 +407,11 @@ if ($GUI) {
     # --- Нижняя панель: копирование лога + контакт ---
     $btnCopy = New-Object System.Windows.Forms.Button
     $btnCopy.Text = "Скопировать лог"
-    $btnCopy.Location = New-Object System.Drawing.Point(20, 566)
+    $btnCopy.Location = New-Object System.Drawing.Point(20, 590)
     $btnCopy.Size = New-Object System.Drawing.Size(150, 30)
     $btnCopy.FlatStyle = "Flat"
-    $btnCopy.FlatAppearance.BorderSize = 0
+    $btnCopy.FlatAppearance.BorderSize = 1
+    $btnCopy.FlatAppearance.BorderColor = $clrBorder
     $btnCopy.BackColor = $clrBtn2
     $btnCopy.ForeColor = $clrText
     $btnCopy.Cursor = "Hand"
@@ -414,10 +429,11 @@ if ($GUI) {
 
     $btnDiag = New-Object System.Windows.Forms.Button
     $btnDiag.Text = "Диагностика"
-    $btnDiag.Location = New-Object System.Drawing.Point(178, 566)
+    $btnDiag.Location = New-Object System.Drawing.Point(178, 590)
     $btnDiag.Size = New-Object System.Drawing.Size(120, 30)
     $btnDiag.FlatStyle = "Flat"
-    $btnDiag.FlatAppearance.BorderSize = 0
+    $btnDiag.FlatAppearance.BorderSize = 1
+    $btnDiag.FlatAppearance.BorderColor = $clrBorder
     $btnDiag.BackColor = $clrBtn2
     $btnDiag.ForeColor = $clrText
     $btnDiag.Cursor = "Hand"
@@ -429,7 +445,7 @@ if ($GUI) {
     $lblCopied.Text = ""
     $lblCopied.Font = $fontSmall
     $lblCopied.ForeColor = $clrOk
-    $lblCopied.Location = New-Object System.Drawing.Point(306, 573)
+    $lblCopied.Location = New-Object System.Drawing.Point(306, 597)
     $lblCopied.AutoSize = $true
     $form.Controls.Add($lblCopied)
 
@@ -438,16 +454,16 @@ if ($GUI) {
     $lblContactPre.Text = "Ошибка? Скопируйте лог и напишите:"
     $lblContactPre.Font = $fontSmall
     $lblContactPre.ForeColor = $clrMuted
-    $lblContactPre.Location = New-Object System.Drawing.Point(20, 610)
+    $lblContactPre.Location = New-Object System.Drawing.Point(20, 634)
     $lblContactPre.AutoSize = $true
     $form.Controls.Add($lblContactPre)
 
     $lnkTg = New-Object System.Windows.Forms.LinkLabel
     $lnkTg.Text = "t.me/Moxy1337"
-    $lnkTg.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
-    $lnkTg.LinkColor = $clrAccent
-    $lnkTg.ActiveLinkColor = $clrAccentH
-    $lnkTg.Location = New-Object System.Drawing.Point(232, 610)
+    $lnkTg.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 8.5)
+    $lnkTg.LinkColor = [System.Drawing.Color]::FromArgb(40, 100, 190)
+    $lnkTg.ActiveLinkColor = [System.Drawing.Color]::FromArgb(30, 80, 160)
+    $lnkTg.Location = New-Object System.Drawing.Point(232, 634)
     $lnkTg.AutoSize = $true
     $lnkTg.Add_LinkClicked({ Start-Process "https://t.me/Moxy1337" })
     $form.Controls.Add($lnkTg)
@@ -583,6 +599,51 @@ if ($GUI) {
                     $hadError = $true
                     Add-Log "[!] Ошибка FOV/экран: $($_.Exception.Message)"
                 }
+            }
+
+            # 3.5) ОТКЛЮЧЕНИЕ ТРЯСКИ КАМЕРЫ (Bober) — пересобирает сборку, читает $dll заново.
+            if ($chkNoBob.Checked) {
+                try {
+                    Load-Dnlib $cwScriptDir
+                    $lblProgress.Text = "Тряска камеры: пересборка сборки..."
+                    [System.Windows.Forms.Application]::DoEvents()
+                    $rb = Invoke-CWNoBob -DllPath $dll
+                    if ($rb.ok) {
+                        [IO.File]::WriteAllBytes($dll, $rb.bytes)
+                        Add-Log "[+] $($rb.msg)"
+                        $applied += "Без тряски камеры"
+                    } else {
+                        Add-Log "[!] $($rb.msg)"
+                    }
+                } catch {
+                    $hadError = $true
+                    Add-Log "[!] Ошибка отключения тряски: $($_.Exception.Message)"
+                }
+            }
+
+            # 4) ЛАУНЧЕР (всегда, без галочки): патчим CWClientLauncher.exe,
+            #    чтобы родной лаунчер запускал игру в окне без рамки (borderless).
+            #    Игровая папка: ...\<game>\CWClient_Data\Managed\Assembly-CSharp.dll → вверх на 2.
+            try {
+                $gameRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $dll))
+                $launcher = Join-Path $gameRoot "CWClientLauncher.exe"
+                if (Test-Path $launcher) {
+                    Load-Dnlib $cwScriptDir
+                    $lblProgress.Text = "Лаунчер: включаю окно без рамки..."
+                    [System.Windows.Forms.Application]::DoEvents()
+                    $rl = Invoke-CWLauncherBorderless -LauncherPath $launcher
+                    if ($rl.ok) {
+                        [IO.File]::WriteAllBytes($launcher, $rl.bytes)
+                        Add-Log "[+] $($rl.msg)"
+                        $applied += "Лаунчер (borderless)"
+                    } else {
+                        Add-Log "[!] Лаунчер пропущен: $($rl.msg)"
+                    }
+                } else {
+                    Add-Log "[*] CWClientLauncher.exe не найден рядом с игрой — патч лаунчера пропущен."
+                }
+            } catch {
+                Add-Log "[!] Ошибка патча лаунчера: $($_.Exception.Message)"
             }
 
             Set-ProgressPct 100

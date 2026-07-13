@@ -95,6 +95,211 @@ function Invoke-CWClickFix {
     return @{ ok=$true; msg="Клик входа сделан надёжным." }
 }
 
+# ---------- ОТКЛЮЧЕНИЕ ТРЯСКИ КАМЕРЫ ПРИ ДВИЖЕНИИ (Bober / view bobbing) ----------
+# Класс Bober отвечает за покачивание камеры при ходьбе (используется только в
+# ClientMoveController.CallLateUpdate для визуала). Три метода дают визуальный выход:
+#   Update()     -> пишет Bober.rotation (наклон камеры)
+#   Position1()  -> смещение позиции камеры (Vector3)
+#   Position2()  -> смещение позиции камеры (Vector3)
+# Обнуляем ВЫХОД этих методов (rotation = identity, позиции = Vector3.zero),
+# не трогая шаги/звук (AdvanceStep/NextStep/sum/step остаются нетронутыми).
+# Принимает путь к Assembly-CSharp.dll, ВОЗВРАЩАЕТ новые байты (@{ ok; bytes; msg }).
+function Invoke-CWNoBob {
+    param([string]$DllPath)
+    if (-not (Test-Path $DllPath)) { return @{ ok=$false; msg="NoBob: DLL не найдена: $DllPath" } }
+    $mod = [dnlib.DotNet.ModuleDefMD]::Load([IO.File]::ReadAllBytes($DllPath))
+    try {
+        $t = $mod.Find("Bober", $true)
+        if (-not $t) { return @{ ok=$false; msg="Тряска: класс Bober не найден (ничего не изменено)." } }
+        $Op = [dnlib.DotNet.Emit.OpCodes]
+
+        # переиспользуем уже существующие в модуле ссылки:
+        #   Vector3::get_zero () и Quaternion::get_identity ()
+        $getZero = $null; $getIdentity = $null
+        foreach ($mr in $mod.GetMemberRefs()) {
+            if (-not $mr.DeclaringType) { continue }
+            if (-not $getZero     -and $mr.DeclaringType.Name -eq "Vector3"    -and $mr.Name -eq "get_zero")     { $getZero = $mr }
+            if (-not $getIdentity -and $mr.DeclaringType.Name -eq "Quaternion" -and $mr.Name -eq "get_identity") { $getIdentity = $mr }
+        }
+        if (-not $getZero -or -not $getIdentity) { return @{ ok=$false; msg="Тряска: ссылки Vector3.zero/Quaternion.identity не найдены." } }
+
+        $done = @()
+
+        # --- Position1 / Position2: тело -> return Vector3.zero ---
+        foreach ($name in @("Position1","Position2")) {
+            $m = $t.Methods | Where-Object { $_.Name -eq $name -and $_.HasBody }
+            if ($m) {
+                $m.Body.ExceptionHandlers.Clear()
+                $m.Body.Variables.Clear()
+                $m.Body.Instructions.Clear()
+                [void]$m.Body.Instructions.Add([dnlib.DotNet.Emit.Instruction]::Create($Op::Call, $getZero))
+                [void]$m.Body.Instructions.Add([dnlib.DotNet.Emit.Instruction]::Create($Op::Ret))
+                $m.Body.KeepOldMaxStack = $false
+                $done += $name
+            }
+        }
+
+        # --- Update: тело -> this.rotation = Quaternion.identity; return ---
+        $mu = $t.Methods | Where-Object { $_.Name -eq "Update" -and $_.HasBody }
+        if ($mu) {
+            $rotField = $t.Fields | Where-Object { $_.Name -eq "rotation" } | Select-Object -First 1
+            if ($rotField) {
+                $mu.Body.ExceptionHandlers.Clear()
+                $mu.Body.Variables.Clear()
+                $mu.Body.Instructions.Clear()
+                [void]$mu.Body.Instructions.Add([dnlib.DotNet.Emit.Instruction]::Create($Op::Ldarg_0))
+                [void]$mu.Body.Instructions.Add([dnlib.DotNet.Emit.Instruction]::Create($Op::Call, $getIdentity))
+                [void]$mu.Body.Instructions.Add([dnlib.DotNet.Emit.Instruction]::Create($Op::Stfld, $rotField))
+                [void]$mu.Body.Instructions.Add([dnlib.DotNet.Emit.Instruction]::Create($Op::Ret))
+                $mu.Body.KeepOldMaxStack = $false
+                $done += "Update"
+            }
+        }
+
+        if ($done.Count -eq 0) { return @{ ok=$false; msg="Тряска: методы Bober не найдены." } }
+
+        # --- ПОКАЧИВАНИЕ ОРУЖИЯ/РУК (armsRoot) в ClientMoveController.CallLateUpdate ---
+        # Два источника, оба гасим:
+        #   1) инерция от движения мыши — поле prevDelta (Vector2) крутит armsRoot через RotateAround.
+        #      Обнуляем prevDelta ПОСЛЕ его накопления и ПЕРЕД первым использованием в armsRoot-блоке.
+        #   2) постоянное «дыхание» по времени — Mathf.Sin/Cos(realtimeSinceStartup) в углах Euler
+        #      для armsRoot.set_localRotation. Заменяем каждый Sin/Cos на 0 (pop; ldc.r4 0),
+        #      сохраняя базовый наклон (state.euler.x + JumpEuler) и звук шагов.
+        $armsMsg = ""
+        $tc = $mod.Find("ClientMoveController", $true)
+        $mc = if ($tc) { $tc.Methods | Where-Object { $_.Name -eq "CallLateUpdate" -and $_.HasBody } } else { $null }
+        if ($mc) {
+            $ci = $mc.Body.Instructions
+            # get_zero (Vector2) — уже есть в модуле, используется этим же методом
+            $v2zero = $null
+            foreach ($mr in $mod.GetMemberRefs()) {
+                if ($mr.DeclaringType -and $mr.DeclaringType.Name -eq "Vector2" -and $mr.Name -eq "get_zero") { $v2zero = $mr; break }
+            }
+            # поле prevDelta
+            $prevDelta = $tc.Fields | Where-Object { $_.Name -eq "prevDelta" } | Select-Object -First 1
+            # индекс первого использования prevDelta ИМЕННО в armsRoot-блоке:
+            # ищем первый RotateAround, затем поднимаемся к началу его armsRoot-блока (ldfld armsRoot).
+            $firstRot = -1
+            for ($i=0; $i -lt $ci.Count; $i++) { if ("$($ci[$i].Operand)" -match "Transform::RotateAround") { $firstRot=$i; break } }
+            $insAt = -1
+            if ($firstRot -ge 0) {
+                for ($i=$firstRot; $i -ge 1; $i--) {
+                    if ("$($ci[$i].Operand)" -match "ClientMoveController::armsRoot") { $insAt=$i-1; break }
+                }
+            }
+            $bobbedArms = $false
+            if ($v2zero -and $prevDelta -and $insAt -ge 0) {
+                $anchor = $ci[$insAt]  # вставляем перед этим объектом
+                $ins = @(
+                    [dnlib.DotNet.Emit.Instruction]::Create($Op::Ldarg_0),
+                    [dnlib.DotNet.Emit.Instruction]::Create($Op::Call, $v2zero),
+                    [dnlib.DotNet.Emit.Instruction]::Create($Op::Stfld, $prevDelta)
+                )
+                $ai = $ci.IndexOf($anchor)
+                for ($j=0; $j -lt $ins.Count; $j++) { $ci.Insert($ai+$j, $ins[$j]) }
+                $bobbedArms = $true
+            }
+            # заменить Mathf.Sin/Cos на 0 (pop; ldc.r4 0) — только в armsRoot-части (после первого RotateAround-блока).
+            $sinCos = 0
+            # пересобираем список (индексы сместились после вставки)
+            $startScan = 0
+            for ($i=0; $i -lt $ci.Count; $i++) { if ("$($ci[$i].Operand)" -match "Transform::RotateAround") { $startScan=$i; break } }
+            for ($i=$ci.Count-1; $i -ge $startScan; $i--) {
+                if ($ci[$i].OpCode.Name -eq "call" -and "$($ci[$i].Operand)" -match "Mathf::(Sin|Cos)") {
+                    $ci[$i].OpCode = $Op::Pop; $ci[$i].Operand = $null
+                    $ci.Insert($i+1, [dnlib.DotNet.Emit.Instruction]::Create($Op::Ldc_R4, [float]0))
+                    $sinCos++
+                }
+            }
+            if ($bobbedArms -or $sinCos -gt 0) {
+                $mc.Body.KeepOldMaxStack = $false
+                $mc.Body.SimplifyBranches(); $mc.Body.OptimizeBranches()
+                $armsMsg = "; оружие: инерция=$([int]$bobbedArms), дыхание=$sinCos"
+                $done += "оружие"
+            }
+        }
+
+        # --- ТРЯСКА ОТ ПУЛЬ/ВЗРЫВОВ/ПРИЗЕМЛЕНИЯ (CameraShaker) ---
+        # CameraShaker.CustomUpdate() вычисляет pos (смещение), которое добавляется к камере и
+        # оружию в CallLateUpdate. Источники InitShake: попадание пули (ClientNetPlayer.Hit),
+        # взрывы (ExplosionFromServer, MortarExplosion), приземление (OnGrounded).
+        # Гасим ВСЮ тряску, обнуляя pos: тело CustomUpdate -> this.pos = Vector3.zero; return.
+        $ts = $mod.Find("CameraShaker", $true)
+        if ($ts) {
+            $cu = $ts.Methods | Where-Object { $_.Name -eq "CustomUpdate" -and $_.HasBody }
+            $posField = $ts.Fields | Where-Object { $_.Name -eq "pos" } | Select-Object -First 1
+            if ($cu -and $posField -and $getZero) {
+                $cu.Body.ExceptionHandlers.Clear()
+                $cu.Body.Variables.Clear()
+                $cu.Body.Instructions.Clear()
+                [void]$cu.Body.Instructions.Add([dnlib.DotNet.Emit.Instruction]::Create($Op::Ldarg_0))
+                [void]$cu.Body.Instructions.Add([dnlib.DotNet.Emit.Instruction]::Create($Op::Call, $getZero))
+                [void]$cu.Body.Instructions.Add([dnlib.DotNet.Emit.Instruction]::Create($Op::Stfld, $posField))
+                [void]$cu.Body.Instructions.Add([dnlib.DotNet.Emit.Instruction]::Create($Op::Ret))
+                $cu.Body.KeepOldMaxStack = $false
+                $armsMsg += "; тряска от пуль/взрывов убрана"
+                $done += "пули/взрывы"
+            }
+        }
+
+        $opts = New-Object dnlib.DotNet.Writer.ModuleWriterOptions($mod)
+        $opts.MetadataOptions.Flags = [dnlib.DotNet.Writer.MetadataFlags]::PreserveAll
+        $ms = New-Object System.IO.MemoryStream
+        $mod.Write($ms, $opts)
+        return @{ ok=$true; bytes=$ms.ToArray(); msg="Тряска камеры и оружия при движении отключена ($($done -join ', ')$armsMsg)." }
+    } finally { $mod.Dispose() }
+}
+
+# ---------- ЛАУНЧЕР: запуск игры в окне без рамки (borderless) ----------
+# Патчит CWClientLauncher.exe: StartGameControl.StartGame ставит аргументы запуска игры.
+# Делаем так, чтобы аргументы ВСЕГДА содержали -popupwindow -screen-fullscreen 0 (borderless),
+# независимо от галки в лаунчере. Тогда родной лаунчер сам запускает игру без рамки.
+# $LauncherPath — путь к CWClientLauncher.exe. Возвращает @{ ok; msg }.
+function Invoke-CWLauncherBorderless {
+    param([string]$LauncherPath)
+    if (-not (Test-Path $LauncherPath)) { return @{ ok=$false; msg="Лаунчер не найден: $LauncherPath" } }
+    $mod = [dnlib.DotNet.ModuleDefMD]::Load([IO.File]::ReadAllBytes($LauncherPath))
+    try {
+        $t = $mod.GetTypes() | Where-Object { $_.Name -eq "StartGameControl" } | Select-Object -First 1
+        if (-not $t) { return @{ ok=$false; msg="Лаунчер: StartGameControl не найден (другая версия?)." } }
+        $m = $t.Methods | Where-Object { $_.Name -eq "StartGame" -and $_.HasBody }
+        if (-not $m) { return @{ ok=$false; msg="Лаунчер: StartGame не найден." } }
+        $inst = $m.Body.Instructions
+        $Op = [dnlib.DotNet.Emit.OpCodes]
+        # 1) строку аргументов игры заменить на borderless (ищем ldstr, за которым set_Arguments рядом)
+        $argStr = $false
+        for ($i=0; $i -lt $inst.Count-1; $i++) {
+            if ($inst[$i].OpCode.Name -eq "ldstr") {
+                # проверим, что в пределах +2 идёт set_Arguments
+                for ($k=$i+1; $k -le [Math]::Min($i+2,$inst.Count-1); $k++) {
+                    if ("$($inst[$k].Operand)" -match "set_Arguments") {
+                        $cur = "$($inst[$i].Operand)"
+                        $inst[$i].Operand = "-popupwindow -screen-fullscreen 0" + $(if ($cur -match "force-gfx") { " -force-gfx-st" } else { "" })
+                        $argStr = $true
+                    }
+                }
+            }
+        }
+        if (-not $argStr) { return @{ ok=$false; msg="Лаунчер: место аргументов запуска не найдено." } }
+        # 2) убрать условие галки — set_Arguments должен вызываться ВСЕГДА.
+        # brfalse.s, у которых цель = ldloc.0 (переход мимо установки аргументов), заменяем на pop.
+        for ($i=0; $i -lt $inst.Count; $i++) {
+            if ($inst[$i].OpCode.Name -eq "brfalse.s" -and "$($inst[$i].Operand)" -match "ldloc\.0") {
+                $inst[$i].OpCode = $Op::Pop; $inst[$i].Operand = $null
+            }
+        }
+        $m.Body.KeepOldMaxStack = $false
+        # бэкап оригинала
+        $bak = "$LauncherPath.orig.bak"
+        if (-not (Test-Path $bak)) { Copy-Item $LauncherPath $bak }
+        $opts = New-Object dnlib.DotNet.Writer.ModuleWriterOptions($mod)
+        $opts.MetadataOptions.Flags = [dnlib.DotNet.Writer.MetadataFlags]::PreserveAll
+        $ms = New-Object System.IO.MemoryStream
+        $mod.Write($ms, $opts)
+        return @{ ok=$true; bytes=$ms.ToArray(); msg="Лаунчер пропатчен: запускает игру в окне без рамки (borderless)." }
+    } finally { $mod.Dispose() }
+}
+
 # ---------- АВТОСПАВН: клик входа Mouse0 всегда истинный ----------
 # Применимо к режимам, где вход в бой идёт кликом ЛКМ (Mouse0):
 #   DMSpawn (Deathmatch), TESpawn (Team Elimination).
@@ -555,15 +760,23 @@ function Invoke-CWFovScreen {
         $NEW.Add($L_afterClose)
         $NEW.Add($L_end)
 
-        # --- перенос: блок stack-нейтрален. Вставляем ПЕРЕД первым из двух закрывающих EndGroup окна. ---
-        # Структура конца метода: ... EndGroup(окно) ; ldarg.0 ; ldfld gui ; EndGroup(окно) ; ret.
-        # Цель = первый (нижний по индексу) из этих двух EndGroup.
+        # --- вставка dropdown ТОЛЬКО во вкладку ВИДЕО/АУДИО (settingsState==1). ---
+        # ВАЖНО: enum SettingsState: GAME=0, VIDEO_AUDIO=1, CONTROLS=2, NETWORK=3, BONUSES=4.
+        # Тело блока VIDEO_AUDIO заканчивается вызовом ResolutionDropDown(...) и безусловным
+        # переходом `br` в общий футер окна. Вставляем наш stack-нейтральный блок ПЕРЕД этим `br`:
+        # тогда при settingsState==1 тело проваливается в dropdown → br в футер; при ≠1 условный
+        # переход блока вкладки перепрыгивает и тело, и dropdown. Так список виден лишь в Видео/Аудио,
+        # но по-прежнему внутри группы окна (координаты относительно панели).
         $inst=$m4.Body.Instructions
-        $retIdx=-1; for($k=$inst.Count-1;$k -ge 0;$k--){ if($inst[$k].OpCode.Name -eq "ret"){ $retIdx=$k; break } }
-        if($retIdx -lt 0){ return @{ ok=$false; msg="FOV/Screen: ret в SettingsGUI.InterfaceGUI не найден." } }
-        $egPre=@(); for($k=$retIdx-1;$k -ge 0 -and $egPre.Count -lt 2;$k--){ if("$($inst[$k].Operand)" -match "EndGroup"){ $egPre=@($k)+$egPre } }
-        if($egPre.Count -lt 2){ return @{ ok=$false; msg="FOV/Screen: два закрывающих EndGroup окна не найдены." } }
-        $targetObj=$inst[$egPre[0]]   # первый (внутренний) из двух EndGroup окна
+        # маркер конца тела VIDEO_AUDIO — последний вызов ResolutionDropDown до конца метода.
+        $resDD=-1
+        for($k=0;$k -lt $inst.Count;$k++){ if("$($inst[$k].Operand)" -match "SettingsGUI::ResolutionDropDown"){ $resDD=$k } }
+        if($resDD -lt 0){ return @{ ok=$false; msg="FOV/Screen: конец блока Видео/Аудио (ResolutionDropDown) не найден." } }
+        # первый br/br.s сразу после ResolutionDropDown — терминатор тела вкладки
+        $brTerm=-1
+        for($k=$resDD+1;$k -le [Math]::Min($resDD+4,$inst.Count-1);$k++){ if($inst[$k].OpCode.Name -eq "br" -or $inst[$k].OpCode.Name -eq "br.s"){ $brTerm=$k; break } }
+        if($brTerm -lt 0){ return @{ ok=$false; msg="FOV/Screen: терминатор (br) блока Видео/Аудио не найден." } }
+        $targetObj=$inst[$brTerm]     # вставляем ПЕРЕД этим br
         $ti=$inst.IndexOf($targetObj)
         for($j=0;$j -lt $NEW.Count;$j++){ $inst.Insert($ti+$j,$NEW[$j]) }
         $m4.Body.SimplifyBranches()
