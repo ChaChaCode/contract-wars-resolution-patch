@@ -188,7 +188,7 @@ if ($GUI) {
 
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Contract Wars — Tweaks Patch"
-    $form.ClientSize = New-Object System.Drawing.Size(560, 610)
+    $form.ClientSize = New-Object System.Drawing.Size(560, 640)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = "FixedDialog"
     $form.MaximizeBox = $false
@@ -310,10 +310,43 @@ if ($GUI) {
     $chkAuto.FlatStyle = "Flat"
     $form.Controls.Add($chkAuto)
 
+    $chkFov = New-Object System.Windows.Forms.CheckBox
+    $chkFov.Text = "Изменить FOV (угол обзора от бедра):"
+    $chkFov.Location = New-Object System.Drawing.Point(20, 296)
+    $chkFov.Size = New-Object System.Drawing.Size(300, 22)
+    $chkFov.Checked = $false
+    $chkFov.ForeColor = $clrText
+    $chkFov.BackColor = $clrBack
+    $chkFov.FlatStyle = "Flat"
+    $form.Controls.Add($chkFov)
+
+    $trkFov = New-Object System.Windows.Forms.TrackBar
+    $trkFov.Location = New-Object System.Drawing.Point(325, 292)
+    $trkFov.Size = New-Object System.Drawing.Size(150, 30)
+    $trkFov.Minimum = 60
+    $trkFov.Maximum = 110
+    $trkFov.Value = 90
+    $trkFov.TickFrequency = 10
+    $trkFov.BackColor = $clrBack
+    $form.Controls.Add($trkFov)
+
+    $lblFovVal = New-Object System.Windows.Forms.Label
+    $lblFovVal.Text = "90°"
+    $lblFovVal.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
+    $lblFovVal.ForeColor = $clrAccent
+    $lblFovVal.Location = New-Object System.Drawing.Point(480, 296)
+    $lblFovVal.AutoSize = $true
+    $form.Controls.Add($lblFovVal)
+
+    $trkFov.Add_ValueChanged({
+        $lblFovVal.Text = "$($trkFov.Value)°"
+        $chkFov.Checked = $true
+    })
+
     # --- Кнопки ---
     $btnPatch = New-Object System.Windows.Forms.Button
     $btnPatch.Text = "ПРИМЕНИТЬ ПАТЧ"
-    $btnPatch.Location = New-Object System.Drawing.Point(20, 300)
+    $btnPatch.Location = New-Object System.Drawing.Point(20, 330)
     $btnPatch.Size = New-Object System.Drawing.Size(330, 46)
     $btnPatch.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
     $btnPatch.FlatStyle = "Flat"
@@ -327,7 +360,7 @@ if ($GUI) {
 
     $btnRestore = New-Object System.Windows.Forms.Button
     $btnRestore.Text = "Откатить"
-    $btnRestore.Location = New-Object System.Drawing.Point(365, 300)
+    $btnRestore.Location = New-Object System.Drawing.Point(365, 330)
     $btnRestore.Size = New-Object System.Drawing.Size(175, 46)
     $btnRestore.FlatStyle = "Flat"
     $btnRestore.FlatAppearance.BorderSize = 0
@@ -343,12 +376,12 @@ if ($GUI) {
     $lblProgress.Text = ""
     $lblProgress.Font = $fontSmall
     $lblProgress.ForeColor = $clrMuted
-    $lblProgress.Location = New-Object System.Drawing.Point(20, 360)
+    $lblProgress.Location = New-Object System.Drawing.Point(20, 390)
     $lblProgress.AutoSize = $true
     $form.Controls.Add($lblProgress)
 
     $pbTrack = New-Object System.Windows.Forms.Panel
-    $pbTrack.Location = New-Object System.Drawing.Point(20, 382)
+    $pbTrack.Location = New-Object System.Drawing.Point(20, 412)
     $pbTrack.Size = New-Object System.Drawing.Size(520, 14)
     $pbTrack.BackColor = $clrPanel
     $form.Controls.Add($pbTrack)
@@ -365,7 +398,7 @@ if ($GUI) {
 
     # --- Журнал ---
     $txtLog = New-Object System.Windows.Forms.TextBox
-    $txtLog.Location = New-Object System.Drawing.Point(20, 408)
+    $txtLog.Location = New-Object System.Drawing.Point(20, 438)
     $txtLog.Size = New-Object System.Drawing.Size(520, 118)
     $txtLog.Multiline = $true
     $txtLog.ReadOnly = $true
@@ -383,7 +416,7 @@ if ($GUI) {
     # --- Нижняя панель: копирование лога + контакт ---
     $btnCopy = New-Object System.Windows.Forms.Button
     $btnCopy.Text = "Скопировать лог"
-    $btnCopy.Location = New-Object System.Drawing.Point(20, 536)
+    $btnCopy.Location = New-Object System.Drawing.Point(20, 566)
     $btnCopy.Size = New-Object System.Drawing.Size(150, 30)
     $btnCopy.FlatStyle = "Flat"
     $btnCopy.FlatAppearance.BorderSize = 0
@@ -404,7 +437,7 @@ if ($GUI) {
 
     $btnDiag = New-Object System.Windows.Forms.Button
     $btnDiag.Text = "Диагностика"
-    $btnDiag.Location = New-Object System.Drawing.Point(178, 536)
+    $btnDiag.Location = New-Object System.Drawing.Point(178, 566)
     $btnDiag.Size = New-Object System.Drawing.Size(120, 30)
     $btnDiag.FlatStyle = "Flat"
     $btnDiag.FlatAppearance.BorderSize = 0
@@ -419,7 +452,7 @@ if ($GUI) {
     $lblCopied.Text = ""
     $lblCopied.Font = $fontSmall
     $lblCopied.ForeColor = $clrOk
-    $lblCopied.Location = New-Object System.Drawing.Point(306, 543)
+    $lblCopied.Location = New-Object System.Drawing.Point(306, 573)
     $lblCopied.AutoSize = $true
     $form.Controls.Add($lblCopied)
 
@@ -428,7 +461,7 @@ if ($GUI) {
     $lblContactPre.Text = "Ошибка? Скопируйте лог и напишите:"
     $lblContactPre.Font = $fontSmall
     $lblContactPre.ForeColor = $clrMuted
-    $lblContactPre.Location = New-Object System.Drawing.Point(20, 580)
+    $lblContactPre.Location = New-Object System.Drawing.Point(20, 610)
     $lblContactPre.AutoSize = $true
     $form.Controls.Add($lblContactPre)
 
@@ -437,7 +470,7 @@ if ($GUI) {
     $lnkTg.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
     $lnkTg.LinkColor = $clrAccent
     $lnkTg.ActiveLinkColor = $clrAccentH
-    $lnkTg.Location = New-Object System.Drawing.Point(232, 580)
+    $lnkTg.Location = New-Object System.Drawing.Point(232, 610)
     $lnkTg.AutoSize = $true
     $lnkTg.Add_LinkClicked({ Start-Process "https://t.me/Moxy1337" })
     $form.Controls.Add($lnkTg)
@@ -460,7 +493,7 @@ if ($GUI) {
     $btnPatch.Add_Click({
         $dll = Get-DllFromForm
         if (-not $dll) { return }
-        if (-not ($chkRes.Checked -or $chkClick.Checked -or $chkAuto.Checked)) {
+        if (-not ($chkRes.Checked -or $chkClick.Checked -or $chkAuto.Checked -or $chkFov.Checked)) {
             Add-Log "[!] Не выбран ни один патч. Отметьте галочку в разделе «Что патчить»."
             return
         }
@@ -504,7 +537,7 @@ if ($GUI) {
             }
 
             # 2) Клик и/или автоспавн — через dnlib (переоткрываем файл)
-            if ($chkClick.Checked -or $chkAuto.Checked) {
+            if ($chkClick.Checked -or $chkAuto.Checked -or $chkFov.Checked) {
                 $dnlibOk = $false
                 try {
                     Load-Dnlib $cwScriptDir
@@ -531,6 +564,11 @@ if ($GUI) {
                             $ra = Invoke-CWAutospawn -mod $mod -bytes $bytes
                             if ($ra.ok) { Add-Log "[+] $($ra.msg)"; $applied += "автоспавн"; $changed = $true }
                             else { $hadError = $true; Add-Log "[!] $($ra.msg)" }
+                        }
+                        if ($chkFov.Checked) {
+                            $rf = Invoke-CWFov -mod $mod -bytes $bytes -Fov ([int]$trkFov.Value)
+                            if ($rf.ok) { Add-Log "[+] $($rf.msg)"; $applied += "FOV $($trkFov.Value)"; $changed = $true }
+                            else { $hadError = $true; Add-Log "[!] $($rf.msg)" }
                         }
                         if ($mod) { $mod.Dispose(); $mod = $null }
                         if ($changed) { [IO.File]::WriteAllBytes($dll, $bytes) }

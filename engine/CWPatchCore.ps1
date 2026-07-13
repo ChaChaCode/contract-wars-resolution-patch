@@ -132,3 +132,36 @@ function Invoke-CWAutospawn {
     if ($done -eq 0) { return @{ ok=$false; msg="Автоспавн: места клика спавна не найдены." } }
     return @{ ok=$true; msg="Автоспавн включён: $($patched -join ', '). Вход в бой без клика (в командных — после выбора стороны). Tactical Conquest / Target Designation используют выбор точки — не затронуты." }
 }
+
+# ---------- FOV: базовый угол обзора «от бедра» ----------
+# В ClientAmmunitions.CallLateUpdate ветка «не прицеливаюсь» задаёт nowCamFov = 60f.
+# Ищем literal 60, за которым идёт stfld nowCamFov, БЕЗ вычитания worldAimFov (то есть чистое
+# присвоение — ветка «от бедра»). ADS-ветки (60 - worldAimFov) не трогаем — прицел сохраняется.
+# Также правим сброс fov=60 (ldc.r4 60 ; call set_fov) для консистентности.
+function Invoke-CWFov {
+    param($mod, [byte[]]$bytes, [int]$Fov)
+    if ($Fov -lt 60 -or $Fov -gt 140) { return @{ ok=$false; msg="FOV вне диапазона 60..140." } }
+    $t = $mod.Find("ClientAmmunitions", $true)
+    if (-not $t) { return @{ ok=$false; msg="FOV: класс ClientAmmunitions не найден." } }
+    $le = [BitConverter]::GetBytes([float]$Fov)
+    $done = 0
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        $inst = $m.Body.Instructions
+        $ilStart = Get-ILStart $mod $m $bytes
+        for ($i=0; $i -lt $inst.Count-1; $i++) {
+            if ($inst[$i].OpCode.Name -ne "ldc.r4") { continue }
+            $val = [float]$inst[$i].Operand
+            if ($val -ne 60.0) { continue }
+            $next = $inst[$i+1]
+            $isHipFov = ($next.OpCode.Name -eq "stfld" -and "$($next.Operand)" -match "nowCamFov")
+            $isReset  = (($next.OpCode.Name -eq "callvirt" -or $next.OpCode.Name -eq "call") -and "$($next.Operand)" -match "set_fov")
+            if (-not ($isHipFov -or $isReset)) { continue }
+            $off = $ilStart + $inst[$i].Offset + 1   # +1: пропускаем opcode 0x22, дальше 4 байта float
+            for ($n=0; $n -lt 4; $n++) { $bytes[$off+$n] = $le[$n] }
+            $done++
+        }
+    }
+    if ($done -eq 0) { return @{ ok=$false; msg="FOV: место (nowCamFov=60) не найдено." } }
+    return @{ ok=$true; msg="FOV изменён на ${Fov}° (обзор от бедра). Прицеливание не затронуто." }
+}
