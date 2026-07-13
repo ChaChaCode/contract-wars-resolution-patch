@@ -1,58 +1,47 @@
 using System;
 using UnityEngine;
 
-// Управление режимом экрана для Contract Wars.
-// Флаг режима хранится ЛОКАЛЬНО в PlayerPrefs "cw_fullscreen" (1=полный экран, 0=окно/borderless),
-// не в профиле и не на сервере. Оконный режим ставит РЕАЛЬНОЕ разрешение монитора (не 800x600).
-// Настоящий borderless достигается запуском игры с -popupwindow (BORDERLESS.vbs) — тогда
-// оконный режим = безрамочное окно на весь монитор.
+// Режим экрана Contract Wars. 3 режима, PlayerPrefs "cw_screenmode" (локально):
+//   0 = Оконный (80% монитора), 1 = Без рамки (borderless), 2 = Полноэкранный (эксклюзив).
+// Логика режима — здесь; сам выпадающий список рисуется в SettingsGUI (через IL, там доступен gui).
 public static class CWScreen
 {
-    public static bool IsFullscreen()
-    {
-        if (!PlayerPrefs.HasKey("cw_fullscreen")) return Screen.fullScreen;
-        return PlayerPrefs.GetInt("cw_fullscreen") != 0;
-    }
+    // Состояние «список раскрыт» — читается/пишется из вставленного в SettingsGUI IL-кода.
+    public static bool dropOpen = false;
 
-    public static void SetFullscreen(bool fs)
+    public static int GetMode()
     {
-        PlayerPrefs.SetInt("cw_fullscreen", fs ? 1 : 0);
+        if (!PlayerPrefs.HasKey("cw_screenmode")) return 1;
+        int m = PlayerPrefs.GetInt("cw_screenmode");
+        return (m < 0 || m > 2) ? 1 : m;
+    }
+    public static void SetMode(int m)
+    {
+        if (m < 0) m = 0; if (m > 2) m = 2;
+        PlayerPrefs.SetInt("cw_screenmode", m);
         Apply();
     }
-
-    public static void Toggle()
+    // Название режима по индексу — для текста кнопок списка.
+    public static string ModeName(int m)
     {
-        SetFullscreen(!IsFullscreen());
+        switch (m) { case 0: return "Оконный"; case 2: return "Полноэкранный"; default: return "Без рамки"; }
     }
+    // Текущее название — для главной кнопки списка.
+    public static string CurName() { return ModeName(GetMode()); }
 
-    // Для чекбокса в меню: принимает новое значение галки; применяет режим только при ИЗМЕНЕНИИ
-    // (чекбокс рисуется каждый кадр, но SetResolution зовём лишь когда пользователь переключил).
-    public static void CheckboxResult(bool newValue)
-    {
-        if (newValue != IsFullscreen())
-            SetFullscreen(newValue);
-    }
+    // F12: циклическое переключение режимов (Оконный -> Без рамки -> Полноэкранный -> ...).
+    public static void Toggle() { SetMode((GetMode() + 1) % 3); }
 
-    // Применить режим. ВСЕГДА borderless (fullScreen=false) — это окно без рамки на весь монитор
-    // при запуске с -popupwindow. Так alt-tab мгновенный и можно класть окна поверх (как в Arc Raiders).
-    // Эксклюзивный fullscreen (true) НЕ используем — он ломает alt-tab и окна-поверх.
-    // Чекбокс «Полный экран»: включён = на весь монитор, выключен = оконный размер (из настроек игры).
     public static void Apply()
     {
         try
         {
-            bool full = IsFullscreen();
-            int w = Screen.currentResolution.width;
-            int h = Screen.currentResolution.height;
-            if (!full)
-            {
-                // оконный (не на весь экран): окно 80% монитора по центру
-                w = (int)(w * 0.8f);
-                h = (int)(h * 0.8f);
-            }
-            if (w < 640) w = 1920;
-            if (h < 480) h = 1080;
-            Screen.SetResolution(w, h, false);   // всегда false = borderless, НЕ эксклюзив
+            int mode = GetMode();
+            int w = Screen.currentResolution.width, h = Screen.currentResolution.height;
+            if (w < 640) w = 1920; if (h < 480) h = 1080;
+            if (mode == 2) Screen.SetResolution(w, h, true);
+            else if (mode == 0) Screen.SetResolution((int)(w * 0.8f), (int)(h * 0.8f), false);
+            else Screen.SetResolution(w, h, false);
         }
         catch { }
     }

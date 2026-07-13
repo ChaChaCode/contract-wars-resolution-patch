@@ -311,37 +311,14 @@ if ($GUI) {
     $form.Controls.Add($chkAuto)
 
     $chkFov = New-Object System.Windows.Forms.CheckBox
-    $chkFov.Text = "Изменить FOV (угол обзора от бедра):"
+    $chkFov.Text = "FOV-ползунок и выбор экрана (в настройках игры)"
     $chkFov.Location = New-Object System.Drawing.Point(20, 296)
-    $chkFov.Size = New-Object System.Drawing.Size(300, 22)
+    $chkFov.Size = New-Object System.Drawing.Size(520, 22)
     $chkFov.Checked = $false
     $chkFov.ForeColor = $clrText
     $chkFov.BackColor = $clrBack
     $chkFov.FlatStyle = "Flat"
     $form.Controls.Add($chkFov)
-
-    $trkFov = New-Object System.Windows.Forms.TrackBar
-    $trkFov.Location = New-Object System.Drawing.Point(325, 292)
-    $trkFov.Size = New-Object System.Drawing.Size(150, 30)
-    $trkFov.Minimum = 60
-    $trkFov.Maximum = 110
-    $trkFov.Value = 90
-    $trkFov.TickFrequency = 10
-    $trkFov.BackColor = $clrBack
-    $form.Controls.Add($trkFov)
-
-    $lblFovVal = New-Object System.Windows.Forms.Label
-    $lblFovVal.Text = "90°"
-    $lblFovVal.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
-    $lblFovVal.ForeColor = $clrAccent
-    $lblFovVal.Location = New-Object System.Drawing.Point(480, 296)
-    $lblFovVal.AutoSize = $true
-    $form.Controls.Add($lblFovVal)
-
-    $trkFov.Add_ValueChanged({
-        $lblFovVal.Text = "$($trkFov.Value)°"
-        $chkFov.Checked = $true
-    })
 
     # --- Кнопки ---
     $btnPatch = New-Object System.Windows.Forms.Button
@@ -537,7 +514,7 @@ if ($GUI) {
             }
 
             # 2) Клик и/или автоспавн — через dnlib (переоткрываем файл)
-            if ($chkClick.Checked -or $chkAuto.Checked -or $chkFov.Checked) {
+            if ($chkClick.Checked -or $chkAuto.Checked) {
                 $dnlibOk = $false
                 try {
                     Load-Dnlib $cwScriptDir
@@ -565,11 +542,6 @@ if ($GUI) {
                             if ($ra.ok) { Add-Log "[+] $($ra.msg)"; $applied += "автоспавн"; $changed = $true }
                             else { $hadError = $true; Add-Log "[!] $($ra.msg)" }
                         }
-                        if ($chkFov.Checked) {
-                            $rf = Invoke-CWFov -mod $mod -bytes $bytes -Fov ([int]$trkFov.Value)
-                            if ($rf.ok) { Add-Log "[+] $($rf.msg)"; $applied += "FOV $($trkFov.Value)"; $changed = $true }
-                            else { $hadError = $true; Add-Log "[!] $($rf.msg)" }
-                        }
                         if ($mod) { $mod.Dispose(); $mod = $null }
                         if ($changed) { [IO.File]::WriteAllBytes($dll, $bytes) }
                     } catch {
@@ -578,6 +550,38 @@ if ($GUI) {
                     } finally {
                         if ($mod) { $mod.Dispose() }
                     }
+                }
+            }
+
+            # 3) FOV-ползунок + переключатель экрана (в настройках игры) —
+            #    ПОСЛЕДНИМ: Invoke-CWFovScreen сама читает $dll заново, пересобирает
+            #    модуль и ВОЗВРАЩАЕТ новые байты, поэтому идёт после клика/автоспавна.
+            if ($chkFov.Checked) {
+                try {
+                    Load-Dnlib $cwScriptDir
+                    $screenDll = Join-Path $cwScriptDir "CWScreen.dll"
+                    if (-not (Test-Path $screenDll)) {
+                        $hadError = $true
+                        Add-Log "[!] CWScreen.dll не найдена рядом с патчером — FOV/экран пропущены."
+                    } else {
+                        $lblProgress.Text = "FOV / экран: пересборка сборки..."
+                        [System.Windows.Forms.Application]::DoEvents()
+                        $rf = Invoke-CWFovScreen -DllPath $dll -ScreenDllPath $screenDll -Fov 90
+                        if ($rf.ok) {
+                            [IO.File]::WriteAllBytes($dll, $rf.bytes)
+                            # скопировать CWScreen.dll в Managed игры (рядом с Assembly-CSharp.dll)
+                            $managedDir = Split-Path -Parent $dll
+                            Copy-Item $screenDll (Join-Path $managedDir "CWScreen.dll") -Force
+                            Add-Log "[+] $($rf.msg)"
+                            $applied += "FOV+экран (в игре)"
+                        } else {
+                            $hadError = $true
+                            Add-Log "[!] $($rf.msg)"
+                        }
+                    }
+                } catch {
+                    $hadError = $true
+                    Add-Log "[!] Ошибка FOV/экран: $($_.Exception.Message)"
                 }
             }
 

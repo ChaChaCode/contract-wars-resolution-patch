@@ -347,12 +347,16 @@ function Invoke-CWFovScreen {
             $m=$mg.Methods | Where-Object {$_.Name -eq $mn -and $_.HasBody}
             if($m -and (CW-PatchToggle $m $Op $toggleRef)){ $m.Body.KeepOldMaxStack=$false; $patched+="MainGUI.$mn" }
         }
+        # SettingsGUI кнопки OK/Применить: НЕ Toggle (иначе каждый клик инвертирует режим),
+        # а Apply — просто применить текущий сохранённый выбор (выбор делается чекбоксом/F12).
         $sg=($mod.Find("SettingsGUI",$true).Methods | Where-Object {$_.Name -eq "InterfaceGUI" -and $_.HasBody})
-        $n=0; while((CW-PatchToggle $sg $Op $toggleRef) -and $n -lt 4){ $n++; $patched+="SettingsGUI.InterfaceGUI#$n" }
+        $n=0; while((CW-PatchToggle $sg $Op $applyRef) -and $n -lt 4){ $n++; $patched+="SettingsGUI.InterfaceGUI#$n" }
         if($n -gt 0){ $sg.Body.KeepOldMaxStack=$false }
 
+        # Apply() ТОЛЬКО в Init (применить режим один раз при старте). НЕ в OnApplicationFocus —
+        # он срабатывает при каждом alt-tab, и SetResolution внутри Apply перебивал переключение окна.
         $main=$mod.Find("Main",$true)
-        foreach($mn in "Init","OnApplicationFocus"){
+        foreach($mn in "Init"){
             $m=$main.Methods | Where-Object {$_.Name -eq $mn -and $_.HasBody} | Select-Object -First 1
             if(-not $m){ continue }
             $ii=$m.Body.Instructions
