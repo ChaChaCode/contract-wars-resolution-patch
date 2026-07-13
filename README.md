@@ -1,32 +1,39 @@
-# Contract Wars — Resolution Unlock
+# Contract Wars — Tweaks Patch
 
-[![Download](https://img.shields.io/badge/%E2%AC%87%20%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC%20%2F%20DOWNLOAD-latest-c69c3c?style=for-the-badge)](https://github.com/ChaChaCode/contract-wars-resolution-patch/releases/latest/download/CW-Resolution-Patch-v1.0.3.zip)
+[![Download](https://img.shields.io/badge/%E2%AC%87%20%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC%20%2F%20DOWNLOAD-latest-c69c3c?style=for-the-badge)](https://github.com/ChaChaCode/contract-wars-resolution-patch/releases/latest/download/CW-Tweaks-Patch-v2.0.0.zip)
 
-Снимает ограничение разрешения **1920×1080** в клиенте Contract Wars. После патча в настройках игры доступны 2K, 4K, 8K и все разрешения вашего монитора.
+Набор улучшений для клиента Contract Wars. Патчи выбираются галочками в окне программы:
 
-*Removes the 1920×1080 resolution cap in the Contract Wars client — unlocks 2K/4K/8K in the in-game settings.*
+- **Разрешение** — снимает ограничение 1920×1080, открывает 2K / 4K / 8K и все разрешения монитора.
+- **Надёжный клик входа** — чинит баг, когда клик на экране загрузки «не срабатывает» и приходится перезаходить.
+- **Автоспавн** — сразу закидывает в бой без клика «ЛКМ для вступления» (Deathmatch и Team Elimination).
+
+*A tweaks patch for the Contract Wars client: unlock 2K/4K/8K resolution, fix the unreliable "click to start" bug, and optional auto-spawn (no click to join). Toggle each in the app window.*
 
 ## Как пользоваться
 
-1. **[Скачать ZIP](https://github.com/ChaChaCode/contract-wars-resolution-patch/releases/latest)** → распаковать.
-2. Запустить **`PATCH.bat`** → выбрать папку игры (находится сама) → **«ПРИМЕНИТЬ ПАТЧ»**.
-3. Запустить игру и выбрать нужное разрешение в настройках.
+1. **[Скачать ZIP](https://github.com/ChaChaCode/contract-wars-resolution-patch/releases/latest)** → распаковать целиком (не запускать из архива).
+2. Запустить **`PATCH.bat`** → выбрать папку игры (находится сама) → отметить нужные патчи → **«ПРИМЕНИТЬ ПАТЧ»**.
+3. Запустить игру.
 
-**Откат:** кнопка «Откатить» в окне или `RESTORE.bat`.
+**Откат:** кнопка «Откатить» в окне (или `RESTORE.bat`) — возвращает оригинальный `Assembly-CSharp.dll` из бэкапа.
 
-**Если пишет «A=1, B=0»** (другая сборка клиента): нажмите кнопку **«Диагностика»** в окне (лог сразу копируется) и пришлите его в Telegram — **[t.me/Moxy1337](https://t.me/Moxy1337)**. Подгоним патч под вашу версию.
+**Если патч не находит место в коде** (другая сборка клиента): нажмите **«Диагностика»** — лог сразу копируется — и пришлите его в Telegram **[t.me/Moxy1337](https://t.me/Moxy1337)**.
 
-## Как работает
+## Что делает каждый патч
 
-В `Assembly-CSharp.dll` зашиты два ограничения — сброс разрешения при старте (`Utility.FixResolution`) и фильтр списка в меню настроек. Патч поднимает оба потолка. Нужные места ищутся по байт-паттернам, поэтому патч переживает разные сборки клиента; при несовпадении файл не меняется. Оригинал сохраняется в `Assembly-CSharp.dll.orig.bak`.
+| Патч | Суть |
+|------|------|
+| Разрешение | Поднимает потолок в `Utility.FixResolution` и в фильтре списка настроек. |
+| Клик входа | На экране «READY!» заменяет одноразовую проверку нажатия на удержание — клик перестаёт «теряться». |
+| Автоспавн | В коде спавна (Deathmatch, Team Elimination) вход в бой больше не требует клика. Таймер респауна и выбор стороны соблюдаются. Tactical Conquest / Target Designation используют выбор точки на карте — не затрагиваются. |
 
-## Консоль
+Патчи ищут места **по именам методов и байт-паттернам**, поэтому переживают разные сборки клиента; при несовпадении файл не меняется. Оригинал сохраняется в `Assembly-CSharp.dll.orig.bak`.
 
-```
-powershell -ExecutionPolicy Bypass -File Patch-CWResolution.ps1 -GamePath "D:\CWClient"
-```
-Параметры: `-MaxWidth`, `-MaxHeight`, `-Restore`.
+## Состав архива
+
+`PATCH.bat`, `RESTORE.bat`, `Patch-CWResolution.ps1`, `CWPatchCore.ps1`, `Diagnose.ps1`, `dnlib.dll` (нужна для патчей клика/автоспавна), `README.md`, `LICENSE`, `dnlib-LICENSE.txt`.
 
 ## Дисклеймер
 
-Файлы игры не распространяются — патчится только ваша локальная копия. Меняется лишь разрешение экрана, игрового преимущества нет. Используйте на свой риск. MIT.
+Файлы игры не распространяются — патчится только ваша локальная копия. Это модификация клиента онлайн-игры: патч разрешения безобиден, а клик/автоспавн меняют клиентское поведение (без игрового преимущества — таймеры и правила соблюдаются). Используйте на свой риск. Библиотека `dnlib` — стороняя, под лицензией MIT (см. `dnlib-LICENSE.txt`). Код патчера — MIT.

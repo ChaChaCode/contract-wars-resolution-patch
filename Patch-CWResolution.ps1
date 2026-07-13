@@ -160,6 +160,11 @@ if ($GUI) {
     Add-Type -AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
 
+    # --- Подключаем модуль патч-функций (разрешение / клик / автоспавн) ---
+    $cwScriptDir = $PSScriptRoot
+    if (-not $cwScriptDir) { $cwScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
+    . (Join-Path $cwScriptDir "CWPatchCore.ps1")
+
     # --- Палитра ---
     # Палитра в стиле UI игры: тёмная сталь + золото CW
     $clrBack    = [System.Drawing.Color]::FromArgb(38, 41, 43)     # фон окна (тёмно-стальной)
@@ -177,7 +182,7 @@ if ($GUI) {
 
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Contract Wars — Resolution Unlock"
-    $form.ClientSize = New-Object System.Drawing.Size(560, 520)
+    $form.ClientSize = New-Object System.Drawing.Size(560, 610)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = "FixedDialog"
     $form.MaximizeBox = $false
@@ -259,10 +264,50 @@ if ($GUI) {
     $cmbRes.SelectedIndex = 0
     $form.Controls.Add($cmbRes)
 
+    # --- ЧТО ПАТЧИТЬ ---
+    $lblWhat = New-Object System.Windows.Forms.Label
+    $lblWhat.Text = "ЧТО ПАТЧИТЬ"
+    $lblWhat.Font = $fontSmall
+    $lblWhat.ForeColor = $clrMuted
+    $lblWhat.Location = New-Object System.Drawing.Point(20, 203)
+    $lblWhat.AutoSize = $true
+    $form.Controls.Add($lblWhat)
+
+    $chkRes = New-Object System.Windows.Forms.CheckBox
+    $chkRes.Text = "Разблокировать разрешение (2K / 4K / 8K)"
+    $chkRes.Location = New-Object System.Drawing.Point(20, 224)
+    $chkRes.Size = New-Object System.Drawing.Size(520, 22)
+    $chkRes.Checked = $true
+    $chkRes.ForeColor = $clrText
+    $chkRes.BackColor = $clrBack
+    $chkRes.FlatStyle = "Flat"
+    $chkRes.Add_CheckedChanged({ $cmbRes.Enabled = $chkRes.Checked })
+    $form.Controls.Add($chkRes)
+
+    $chkClick = New-Object System.Windows.Forms.CheckBox
+    $chkClick.Text = "Исправить клик входа в игру (надёжный)"
+    $chkClick.Location = New-Object System.Drawing.Point(20, 248)
+    $chkClick.Size = New-Object System.Drawing.Size(520, 22)
+    $chkClick.Checked = $true
+    $chkClick.ForeColor = $clrText
+    $chkClick.BackColor = $clrBack
+    $chkClick.FlatStyle = "Flat"
+    $form.Controls.Add($chkClick)
+
+    $chkAuto = New-Object System.Windows.Forms.CheckBox
+    $chkAuto.Text = "Автоспавн — сразу в бой без клика (DM, Team Elimination)"
+    $chkAuto.Location = New-Object System.Drawing.Point(20, 272)
+    $chkAuto.Size = New-Object System.Drawing.Size(520, 22)
+    $chkAuto.Checked = $false
+    $chkAuto.ForeColor = $clrText
+    $chkAuto.BackColor = $clrBack
+    $chkAuto.FlatStyle = "Flat"
+    $form.Controls.Add($chkAuto)
+
     # --- Кнопки ---
     $btnPatch = New-Object System.Windows.Forms.Button
     $btnPatch.Text = "ПРИМЕНИТЬ ПАТЧ"
-    $btnPatch.Location = New-Object System.Drawing.Point(20, 210)
+    $btnPatch.Location = New-Object System.Drawing.Point(20, 300)
     $btnPatch.Size = New-Object System.Drawing.Size(330, 46)
     $btnPatch.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
     $btnPatch.FlatStyle = "Flat"
@@ -276,7 +321,7 @@ if ($GUI) {
 
     $btnRestore = New-Object System.Windows.Forms.Button
     $btnRestore.Text = "Откатить"
-    $btnRestore.Location = New-Object System.Drawing.Point(365, 210)
+    $btnRestore.Location = New-Object System.Drawing.Point(365, 300)
     $btnRestore.Size = New-Object System.Drawing.Size(175, 46)
     $btnRestore.FlatStyle = "Flat"
     $btnRestore.FlatAppearance.BorderSize = 0
@@ -292,12 +337,12 @@ if ($GUI) {
     $lblProgress.Text = ""
     $lblProgress.Font = $fontSmall
     $lblProgress.ForeColor = $clrMuted
-    $lblProgress.Location = New-Object System.Drawing.Point(20, 270)
+    $lblProgress.Location = New-Object System.Drawing.Point(20, 360)
     $lblProgress.AutoSize = $true
     $form.Controls.Add($lblProgress)
 
     $pbTrack = New-Object System.Windows.Forms.Panel
-    $pbTrack.Location = New-Object System.Drawing.Point(20, 292)
+    $pbTrack.Location = New-Object System.Drawing.Point(20, 382)
     $pbTrack.Size = New-Object System.Drawing.Size(520, 14)
     $pbTrack.BackColor = $clrPanel
     $form.Controls.Add($pbTrack)
@@ -314,7 +359,7 @@ if ($GUI) {
 
     # --- Журнал ---
     $txtLog = New-Object System.Windows.Forms.TextBox
-    $txtLog.Location = New-Object System.Drawing.Point(20, 318)
+    $txtLog.Location = New-Object System.Drawing.Point(20, 408)
     $txtLog.Size = New-Object System.Drawing.Size(520, 118)
     $txtLog.Multiline = $true
     $txtLog.ReadOnly = $true
@@ -332,7 +377,7 @@ if ($GUI) {
     # --- Нижняя панель: копирование лога + контакт ---
     $btnCopy = New-Object System.Windows.Forms.Button
     $btnCopy.Text = "Скопировать лог"
-    $btnCopy.Location = New-Object System.Drawing.Point(20, 446)
+    $btnCopy.Location = New-Object System.Drawing.Point(20, 536)
     $btnCopy.Size = New-Object System.Drawing.Size(150, 30)
     $btnCopy.FlatStyle = "Flat"
     $btnCopy.FlatAppearance.BorderSize = 0
@@ -353,7 +398,7 @@ if ($GUI) {
 
     $btnDiag = New-Object System.Windows.Forms.Button
     $btnDiag.Text = "Диагностика"
-    $btnDiag.Location = New-Object System.Drawing.Point(178, 446)
+    $btnDiag.Location = New-Object System.Drawing.Point(178, 536)
     $btnDiag.Size = New-Object System.Drawing.Size(120, 30)
     $btnDiag.FlatStyle = "Flat"
     $btnDiag.FlatAppearance.BorderSize = 0
@@ -368,7 +413,7 @@ if ($GUI) {
     $lblCopied.Text = ""
     $lblCopied.Font = $fontSmall
     $lblCopied.ForeColor = $clrOk
-    $lblCopied.Location = New-Object System.Drawing.Point(306, 453)
+    $lblCopied.Location = New-Object System.Drawing.Point(306, 543)
     $lblCopied.AutoSize = $true
     $form.Controls.Add($lblCopied)
 
@@ -377,7 +422,7 @@ if ($GUI) {
     $lblContactPre.Text = "Ошибка? Скопируйте лог и напишите:"
     $lblContactPre.Font = $fontSmall
     $lblContactPre.ForeColor = $clrMuted
-    $lblContactPre.Location = New-Object System.Drawing.Point(20, 490)
+    $lblContactPre.Location = New-Object System.Drawing.Point(20, 580)
     $lblContactPre.AutoSize = $true
     $form.Controls.Add($lblContactPre)
 
@@ -386,7 +431,7 @@ if ($GUI) {
     $lnkTg.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
     $lnkTg.LinkColor = $clrAccent
     $lnkTg.ActiveLinkColor = $clrAccentH
-    $lnkTg.Location = New-Object System.Drawing.Point(232, 490)
+    $lnkTg.Location = New-Object System.Drawing.Point(232, 580)
     $lnkTg.AutoSize = $true
     $lnkTg.Add_LinkClicked({ Start-Process "https://t.me/Moxy1337" })
     $form.Controls.Add($lnkTg)
@@ -409,6 +454,10 @@ if ($GUI) {
     $btnPatch.Add_Click({
         $dll = Get-DllFromForm
         if (-not $dll) { return }
+        if (-not ($chkRes.Checked -or $chkClick.Checked -or $chkAuto.Checked)) {
+            Add-Log "[!] Не выбран ни один патч. Отметьте галочку в разделе «Что патчить»."
+            return
+        }
         $w, $h = switch ($cmbRes.SelectedIndex) {
             1 { 3840, 2160 }
             2 { 2560, 1440 }
@@ -417,23 +466,86 @@ if ($GUI) {
         Add-Log "[*] DLL: $dll"
         $btnPatch.Enabled = $false; $btnRestore.Enabled = $false; $btnBrowse.Enabled = $false
         $lblProgress.ForeColor = $clrMuted
-        $lblProgress.Text = "Применение патча: сканирование DLL..."
+        Set-ProgressPct 0
+        $applied = @()
+        $hadError = $false
         try {
-            $r = Invoke-CWPatch -Dll $dll -W $w -H $h -OnProgress {
-                param($pct)
-                Set-ProgressPct $pct
-                $lblProgress.Text = "Применение патча: $pct%"
-                [System.Windows.Forms.Application]::DoEvents()
+            # Единый бэкап до первого патча
+            $backup = "$dll.orig.bak"
+            if (-not (Test-Path $backup)) {
+                Copy-Item $dll $backup
+                Add-Log "[+] Бэкап сохранён: $backup"
             }
-            if ($r.ok) {
+
+            # 1) Разрешение — чисто байтовый патч (файл пишем сразу, dnlib не держим)
+            if ($chkRes.Checked) {
+                $lblProgress.Text = "Разрешение: сканирование DLL..."
+                $bytes = [IO.File]::ReadAllBytes($dll)
+                $r = Invoke-CWResolution -bytes $bytes -W $w -H $h -OnProgress {
+                    param($pct)
+                    Set-ProgressPct $pct
+                    $lblProgress.Text = "Разрешение: $pct%"
+                    [System.Windows.Forms.Application]::DoEvents()
+                }
+                if ($r.ok) {
+                    [IO.File]::WriteAllBytes($dll, $bytes)
+                    Add-Log "[+] $($r.msg)"
+                    $applied += "разрешение ${w}x${h}"
+                } else {
+                    $hadError = $true
+                    Add-Log "[!] $($r.msg)"
+                }
+            }
+
+            # 2) Клик и/или автоспавн — через dnlib (переоткрываем файл)
+            if ($chkClick.Checked -or $chkAuto.Checked) {
+                $dnlibOk = $false
+                try {
+                    Load-Dnlib $cwScriptDir
+                    $dnlibOk = $true
+                } catch {
+                    $hadError = $true
+                    Add-Log "[!] Для клика/автоспавна нужна dnlib.dll рядом с патчером."
+                    Add-Log "    ($($_.Exception.Message))"
+                }
+                if ($dnlibOk) {
+                    $lblProgress.Text = "Клик / автоспавн: разбор сборки..."
+                    [System.Windows.Forms.Application]::DoEvents()
+                    $mod = $null
+                    try {
+                        $mod = [dnlib.DotNet.ModuleDefMD]::Load($dll)
+                        $bytes = [IO.File]::ReadAllBytes($dll)
+                        $changed = $false
+                        if ($chkClick.Checked) {
+                            $rc = Invoke-CWClickFix -mod $mod -bytes $bytes
+                            if ($rc.ok) { Add-Log "[+] $($rc.msg)"; $applied += "клик входа"; $changed = $true }
+                            else { $hadError = $true; Add-Log "[!] $($rc.msg)" }
+                        }
+                        if ($chkAuto.Checked) {
+                            $ra = Invoke-CWAutospawn -mod $mod -bytes $bytes
+                            if ($ra.ok) { Add-Log "[+] $($ra.msg)"; $applied += "автоспавн"; $changed = $true }
+                            else { $hadError = $true; Add-Log "[!] $($ra.msg)" }
+                        }
+                        if ($mod) { $mod.Dispose(); $mod = $null }
+                        if ($changed) { [IO.File]::WriteAllBytes($dll, $bytes) }
+                    } catch {
+                        $hadError = $true
+                        Add-Log "[!] Ошибка клика/автоспавна: $($_.Exception.Message)"
+                    } finally {
+                        if ($mod) { $mod.Dispose() }
+                    }
+                }
+            }
+
+            Set-ProgressPct 100
+            if ($applied.Count -gt 0) {
                 $lblProgress.Text = "Готово!"
                 $lblProgress.ForeColor = $clrOk
-                Add-Log "[+] $($r.message)"
+                Add-Log "[+] Готово! Применено: $($applied -join ', ')."
             } else {
-                $lblProgress.Text = "Ошибка — файл не изменён."
+                $lblProgress.Text = "Ничего не применено."
                 $lblProgress.ForeColor = [System.Drawing.Color]::FromArgb(235, 100, 100)
                 Set-ProgressPct 0
-                Add-Log "[!] $($r.message)"
             }
         } catch {
             $lblProgress.Text = "Ошибка."
