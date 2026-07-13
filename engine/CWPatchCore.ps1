@@ -166,13 +166,18 @@ function Invoke-CWFov {
     return @{ ok=$true; msg="FOV изменён на ${Fov}° (обзор от бедра). Прицеливание не затронуто." }
 }
 
-# ---------- FOV-ползунок + переключатель режима экрана (единый проход dnlib) ----------
-# Объединяет 4 отлаженные трансформации над ОДНИМ загруженным модулем, ПЕРЕСОБИРАЕТ его
+# ---------- FOV-ползунок + выпадающий список режима экрана (единый проход dnlib) ----------
+# Объединяет отлаженные трансформации над ОДНИМ загруженным модулем, ПЕРЕСОБИРАЕТ его
 # (Insert инструкций требует mod.Write) и ВОЗВРАЩАЕТ новые байты — не правит переданный $bytes.
 # Порядок применения строго: (1) fov-чтение PlayerPrefs в ClientAmmunitions.CallLateUpdate,
 # (2) fov-ползунок + сдвиг блока графики в SettingsGUI.InterfaceGUI,
 # (3) screen-тумблеры (get_fullScreen+SetResolution -> CWScreen.Toggle) + Apply в Main,
-# (4) чекбокс «Полный экран» в SettingsGUI (якорь set_ShadowDistance ищется заново по сигнатуре).
+# (4) ВЫПАДАЮЩИЙ СПИСОК выбора режима экрана (3 режима) в SettingsGUI.InterfaceGUI —
+#     dropdown-IL собирается инлайн (операнды берутся из штатного SimpleQualityDropDown),
+#     затем ПЕРЕНОСИТСЯ в конец группы окна (перед первым из двух закрывающих EndGroup окна),
+#     чтобы рисоваться поверх остальных элементов. Старый чекбокс больше НЕ вставляется.
+# CWScreen — public-класс с public static полем dropOpen и public-методами, поэтому
+# InternalsVisibleTo НЕ требуется (доступ к public-членам не зависит от границ сборки).
 # $DllPath — путь к патчимой Assembly-CSharp.dll; $ScreenDllPath — путь к CWScreen.dll (для Importer).
 function Invoke-CWFovScreen {
     param([string]$DllPath, [string]$ScreenDllPath, [int]$Fov = 90)
@@ -190,11 +195,16 @@ function Invoke-CWFovScreen {
     try {
         $imp = New-Object dnlib.DotNet.Importer($mod)
 
-        # ===== ссылки CWScreen (screen_patch + screen_checkbox) =====
-        $toggleRef = $imp.Import(($scr.Find("CWScreen",$true).Methods | Where-Object { $_.Name -eq "Toggle" }))
-        $applyRef  = $imp.Import(($scr.Find("CWScreen",$true).Methods | Where-Object { $_.Name -eq "Apply" }))
-        $isFs      = $imp.Import(($scr.Find("CWScreen",$true).Methods | Where-Object { $_.Name -eq "IsFullscreen" }))
-        $cbRes     = $imp.Import(($scr.Find("CWScreen",$true).Methods | Where-Object { $_.Name -eq "CheckboxResult" }))
+        # ===== ссылки CWScreen (screen_patch — тумблеры/Apply; dropdown — список режимов) =====
+        $cwType    = $scr.Find("CWScreen",$true)
+        $toggleRef = $imp.Import(($cwType.Methods | Where-Object { $_.Name -eq "Toggle" }))
+        $applyRef  = $imp.Import(($cwType.Methods | Where-Object { $_.Name -eq "Apply" }))
+        # dropdown-список: CurName (главная кнопка), ModeName/SetMode (пункты), поле dropOpen (состояние).
+        # Все члены CWScreen public => IVT не нужен, Importer импортирует их напрямую.
+        $curNameRef  = $imp.Import(($cwType.Methods | Where-Object { $_.Name -eq "CurName" }))
+        $modeNameRef = $imp.Import(($cwType.Methods | Where-Object { $_.Name -eq "ModeName" }))
+        $setModeRef  = $imp.Import(($cwType.Methods | Where-Object { $_.Name -eq "SetMode" }))
+        $dropOpenRef = $imp.Import(($cwType.Fields  | Where-Object { $_.Name -eq "dropOpen" }))
 
         # ===== общие ссылки PlayerPrefs (fov_step1 + fov_step2) =====
         $getInt = $null; $hasKey = $null; $setInt = $null
@@ -270,6 +280,7 @@ function Invoke-CWFovScreen {
 
         $shiftY = @{
             115.0=92.0; 117.0=94.0; 124.0=101.0
+            104.0=82.0                                 # текст значения качества («Пользовательские») — выровнять с ползунком
             152.0=124.0
             182.0=150.0; 184.0=152.0; 212.0=178.0
             242.0=210.0; 248.0=216.0; 272.0=240.0; 278.0=246.0
@@ -365,50 +376,200 @@ function Invoke-CWFovScreen {
         }
 
         # =========================================================================
-        # (4) screen_checkbox — чекбокс «Полный экран» (якорь ShadowDistance ищется заново)
+        # (4) dropdown — выпадающий список выбора режима экрана (3 режима) в SettingsGUI.InterfaceGUI
+        #     IL собирается инлайн (операнды из штатного SimpleQualityDropDown этой сборки),
+        #     блок stack-нейтрален, затем ПЕРЕНОСИТСЯ в конец группы окна (перед первым из двух
+        #     закрывающих EndGroup окна) — чтобы список рисовался поверх остальных элементов.
         # =========================================================================
-        $checkBox=($mod.Find("MainGUI",$true).Methods | Where-Object {$_.Name -eq "CheckBox"})
-        $vec2=$null;$rect=$null;$nullRect=$null
-        foreach($mr in $mod.GetMemberRefs()){
-            if($mr.Name -eq ".ctor" -and $mr.DeclaringType.Name -eq "Vector2"){$vec2=$mr}
-            if($mr.Name -eq ".ctor" -and $mr.DeclaringType.Name -eq "Rect" -and $mr.MethodSig.Params.Count -eq 4){$rect=$mr}
-            if($mr.Name -eq ".ctor" -and "$($mr.DeclaringType)" -match "Nullable" -and "$($mr.DeclaringType)" -match "Rect"){$nullRect=$mr}
-        }
-
         $m4=($mod.Find("SettingsGUI",$true).Methods | Where-Object {$_.Name -eq "InterfaceGUI"})
-        $inst=$m4.Body.Instructions
-        $anchor=-1
-        for($i=0;$i -lt $inst.Count;$i++){
-            if($inst[$i].OpCode.Name -eq "callvirt" -and "$($inst[$i].Operand)" -match "set_ShadowDistance"){
-                $flags=@(); for($k=$i-1;$k -ge $i-8 -and $k -ge 0;$k--){ if($inst[$k].OpCode.Name -match "^ldc\.i4"){ $flags=@($inst[$k].OpCode.Name)+$flags } }
-                if($flags.Count -ge 3 -and $flags[-3] -eq "ldc.i4.1" -and $flags[-2] -eq "ldc.i4.0" -and $flags[-1] -eq "ldc.i4.0"){ $anchor=$i; break }
-            }
+        $sqdd=($mod.Find("SettingsGUI",$true).Methods | Where-Object {$_.Name -eq "SimpleQualityDropDown"})
+        if(-not $sqdd){ return @{ ok=$false; msg="FOV/Screen: SettingsGUI.SimpleQualityDropDown (эталон операндов) не найден." } }
+        $sq=$sqdd.Body.Instructions
+
+        # --- операнды-ссылки из штатного дропдауна (валидные токены этой сборки) ---
+        $fld_gui      = $sq[1].Operand      # Form::gui
+        $fld_mmb      = $sq[5].Operand      # MainGUI::mainMenuButtons
+        $m_Button     = $sq[31].Operand     # MainGUI::Button(...)
+        $fld_Clicked  = $sq[34].Operand     # ButtonState::Clicked
+        $ctor_Vector2 = $sq[55].Operand     # Vector2::.ctor
+        $fld_v2x      = $sq[48].Operand     # Vector2::x
+        $fld_v2y      = $sq[52].Operand     # Vector2::y
+        $fld_sw       = $sq[58].Operand     # MainGUI::settings_window
+        $m_Picture    = $sq[61].Operand     # MainGUI::Picture
+        $m_getheight  = $sq[78].Operand     # Texture::get_height
+        $m_getwidth   = $sq[111].Operand    # Texture::get_width
+        $ctor_Rect    = $sq[124].Operand    # Rect::.ctor
+        $m_BeginGroup = $sq[125].Operand    # MainGUI::BeginGroup
+        $m_EndGroup   = $sq[264].Operand    # MainGUI::EndGroup
+        $fld_upper    = $sq[304].Operand    # MainGUI::upper
+        $m_getcursor  = $sq[307].Operand    # MainGUI::get_cursorPosition
+        $m_inRect     = $sq[308].Operand    # MainGUI::inRect
+        $m_GetMouseDn = $sq[315].Operand    # Input::GetMouseButtonDown
+        $ty_nbutton   = $sq[24].Operand     # Nullable<ButtonState>
+        $ty_nvector   = $sq[27].Operand     # Nullable<Vector2>
+
+        # --- локальные переменные (типы берём из штатных методов) ---
+        $sig_nbutton = $sqdd.Body.Variables[0].Type   # Nullable<ButtonState>
+        $sig_button  = $sqdd.Body.Variables[2].Type   # ButtonState
+        $sig_rect    = $m4.Body.Variables[0].Type      # Rect
+        $sig_vector2 = $m4.Body.Variables[3].Type      # Vector2
+        $sig_nvector = $m4.Body.Variables[28].Type     # Nullable<Vector2>
+        $Local = [dnlib.DotNet.Emit.Local]
+        $L_pos  = $m4.Body.Variables.Add((New-Object $Local($sig_vector2)))
+        $L_nbA  = $m4.Body.Variables.Add((New-Object $Local($sig_nbutton)))
+        $L_nvA  = $m4.Body.Variables.Add((New-Object $Local($sig_nvector)))
+        $L_bsA  = $m4.Body.Variables.Add((New-Object $Local($sig_button)))
+        $L_nbB  = $m4.Body.Variables.Add((New-Object $Local($sig_nbutton)))
+        $L_nvB  = $m4.Body.Variables.Add((New-Object $Local($sig_nvector)))
+        $L_bsB  = $m4.Body.Variables.Add((New-Object $Local($sig_button)))
+        $L_rect = $m4.Body.Variables.Add((New-Object $Local($sig_rect)))
+
+        $NEW = New-Object System.Collections.Generic.List[object]
+        $L_afterMain = $Instr::Create($Op::Nop)
+        $L_elseOpen  = $Instr::Create($Op::Nop)
+        $L_end       = $Instr::Create($Op::Nop)
+
+        # pos = new Vector2(235,64)  (главная кнопка списка, X=235 у строки разрешения)
+        $NEW.Add($Instr::Create($Op::Ldc_R4,[float]235))
+        $NEW.Add($Instr::Create($Op::Ldc_R4,[float]64))
+        $NEW.Add($Instr::Create($Op::Newobj,$ctor_Vector2))
+        $NEW.Add($Instr::Create($Op::Stloc,$L_pos))
+
+        # главная кнопка: gui.Button(pos, mmb[0], mmb[1], mmb[1], CWScreen.CurName(), 15, "#FFFFFF", 4, null?, null?, null, null)
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui))
+        $NEW.Add($Instr::Create($Op::Ldloc,$L_pos))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_mmb)); $NEW.Add($Instr::Create($Op::Ldc_I4_0)); $NEW.Add($Instr::Create($Op::Ldelem_Ref))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_mmb)); $NEW.Add($Instr::Create($Op::Ldc_I4_1)); $NEW.Add($Instr::Create($Op::Ldelem_Ref))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_mmb)); $NEW.Add($Instr::Create($Op::Ldc_I4_1)); $NEW.Add($Instr::Create($Op::Ldelem_Ref))
+        $NEW.Add($Instr::Create($Op::Call,$curNameRef))
+        $NEW.Add($Instr::Create($Op::Ldc_I4_S,[sbyte]15))
+        $NEW.Add($Instr::Create($Op::Ldstr,"#FFFFFF"))
+        $NEW.Add($Instr::Create($Op::Ldc_I4_4))
+        $NEW.Add($Instr::Create($Op::Ldloca_S,$L_nbA)); $NEW.Add($Instr::Create($Op::Initobj,$ty_nbutton)); $NEW.Add($Instr::Create($Op::Ldloc,$L_nbA))
+        $NEW.Add($Instr::Create($Op::Ldloca_S,$L_nvA)); $NEW.Add($Instr::Create($Op::Initobj,$ty_nvector)); $NEW.Add($Instr::Create($Op::Ldloc,$L_nvA))
+        $NEW.Add($Instr::Create($Op::Ldnull)); $NEW.Add($Instr::Create($Op::Ldnull))
+        $NEW.Add($Instr::Create($Op::Callvirt,$m_Button))
+        $NEW.Add($Instr::Create($Op::Stloc,$L_bsA))
+        $NEW.Add($Instr::Create($Op::Ldloca_S,$L_bsA))
+        $NEW.Add($Instr::Create($Op::Ldfld,$fld_Clicked))
+        $NEW.Add($Instr::Create($Op::Brfalse,$L_afterMain))
+        # клик по главной кнопке -> dropOpen = !dropOpen
+        $NEW.Add($Instr::Create($Op::Ldsfld,$dropOpenRef))
+        $NEW.Add($Instr::Create($Op::Ldc_I4_0))
+        $NEW.Add($Instr::Create($Op::Ceq))
+        $NEW.Add($Instr::Create($Op::Stsfld,$dropOpenRef))
+        $NEW.Add($L_afterMain)
+
+        # if(!dropOpen) picture(collapsed sw[2]); else открыть список
+        $NEW.Add($Instr::Create($Op::Ldsfld,$dropOpenRef))
+        $NEW.Add($Instr::Create($Op::Brtrue,$L_elseOpen))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui))
+        $NEW.Add($Instr::Create($Op::Ldloca_S,$L_pos)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_v2x)); $NEW.Add($Instr::Create($Op::Ldc_R4,[float]165)); $NEW.Add($Instr::Create($Op::Add))
+        $NEW.Add($Instr::Create($Op::Ldloca_S,$L_pos)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_v2y)); $NEW.Add($Instr::Create($Op::Ldc_R4,[float]8)); $NEW.Add($Instr::Create($Op::Add))
+        $NEW.Add($Instr::Create($Op::Newobj,$ctor_Vector2))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_sw)); $NEW.Add($Instr::Create($Op::Ldc_I4_2)); $NEW.Add($Instr::Create($Op::Ldelem_Ref))
+        $NEW.Add($Instr::Create($Op::Callvirt,$m_Picture))
+        $NEW.Add($Instr::Create($Op::Br,$L_end))
+
+        # else: раскрытый список
+        $NEW.Add($L_elseOpen)
+        # gui.Picture(new Vector2(pos.x-5, pos.y+mmb[0].height), sw[4])
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui))
+        $NEW.Add($Instr::Create($Op::Ldloca_S,$L_pos)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_v2x)); $NEW.Add($Instr::Create($Op::Ldc_R4,[float]5)); $NEW.Add($Instr::Create($Op::Sub))
+        $NEW.Add($Instr::Create($Op::Ldloca_S,$L_pos)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_v2y))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_mmb)); $NEW.Add($Instr::Create($Op::Ldc_I4_0)); $NEW.Add($Instr::Create($Op::Ldelem_Ref)); $NEW.Add($Instr::Create($Op::Callvirt,$m_getheight)); $NEW.Add($Instr::Create($Op::Conv_R4)); $NEW.Add($Instr::Create($Op::Add))
+        $NEW.Add($Instr::Create($Op::Newobj,$ctor_Vector2))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_sw)); $NEW.Add($Instr::Create($Op::Ldc_I4_4)); $NEW.Add($Instr::Create($Op::Ldelem_Ref))
+        $NEW.Add($Instr::Create($Op::Callvirt,$m_Picture))
+
+        # gui.BeginGroup(new Rect(pos.x-5, pos.y+mmb[0].height+4, sw[4].width-5, sw[4].height))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui))
+        $NEW.Add($Instr::Create($Op::Ldloca_S,$L_pos)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_v2x)); $NEW.Add($Instr::Create($Op::Ldc_R4,[float]5)); $NEW.Add($Instr::Create($Op::Sub))
+        $NEW.Add($Instr::Create($Op::Ldloca_S,$L_pos)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_v2y))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_mmb)); $NEW.Add($Instr::Create($Op::Ldc_I4_0)); $NEW.Add($Instr::Create($Op::Ldelem_Ref)); $NEW.Add($Instr::Create($Op::Callvirt,$m_getheight)); $NEW.Add($Instr::Create($Op::Conv_R4)); $NEW.Add($Instr::Create($Op::Add))
+        $NEW.Add($Instr::Create($Op::Ldc_R4,[float]4)); $NEW.Add($Instr::Create($Op::Add))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_sw)); $NEW.Add($Instr::Create($Op::Ldc_I4_4)); $NEW.Add($Instr::Create($Op::Ldelem_Ref)); $NEW.Add($Instr::Create($Op::Callvirt,$m_getwidth)); $NEW.Add($Instr::Create($Op::Ldc_I4_5)); $NEW.Add($Instr::Create($Op::Sub)); $NEW.Add($Instr::Create($Op::Conv_R4))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_sw)); $NEW.Add($Instr::Create($Op::Ldc_I4_4)); $NEW.Add($Instr::Create($Op::Ldelem_Ref)); $NEW.Add($Instr::Create($Op::Callvirt,$m_getheight)); $NEW.Add($Instr::Create($Op::Conv_R4))
+        $NEW.Add($Instr::Create($Op::Newobj,$ctor_Rect))
+        $NEW.Add($Instr::Create($Op::Callvirt,$m_BeginGroup))
+
+        # три пункта: ModeName(i) -> при клике dropOpen=0; SetMode(i). Y_i = 3 + (mmb[1].height+5)*i
+        $optButton = {
+            param([int]$mIdx, [scriptblock]$emitY)
+            $lbl_after = $Instr::Create($Op::Nop)
+            $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui))
+            $NEW.Add($Instr::Create($Op::Ldc_R4,[float]4))
+            & $emitY
+            $NEW.Add($Instr::Create($Op::Newobj,$ctor_Vector2))
+            $NEW.Add($Instr::Create($Op::Ldnull))
+            $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_mmb)); $NEW.Add($Instr::Create($Op::Ldc_I4_1)); $NEW.Add($Instr::Create($Op::Ldelem_Ref))
+            $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_mmb)); $NEW.Add($Instr::Create($Op::Ldc_I4_1)); $NEW.Add($Instr::Create($Op::Ldelem_Ref))
+            $NEW.Add($Instr::Create($Op::Ldc_I4,[int]$mIdx)); $NEW.Add($Instr::Create($Op::Call,$modeNameRef))
+            $NEW.Add($Instr::Create($Op::Ldc_I4_S,[sbyte]15))
+            $NEW.Add($Instr::Create($Op::Ldstr,"#ffffff"))
+            $NEW.Add($Instr::Create($Op::Ldc_I4_4))
+            $NEW.Add($Instr::Create($Op::Ldloca_S,$L_nbB)); $NEW.Add($Instr::Create($Op::Initobj,$ty_nbutton)); $NEW.Add($Instr::Create($Op::Ldloc,$L_nbB))
+            $NEW.Add($Instr::Create($Op::Ldloca_S,$L_nvB)); $NEW.Add($Instr::Create($Op::Initobj,$ty_nvector)); $NEW.Add($Instr::Create($Op::Ldloc,$L_nvB))
+            $NEW.Add($Instr::Create($Op::Ldnull)); $NEW.Add($Instr::Create($Op::Ldnull))
+            $NEW.Add($Instr::Create($Op::Callvirt,$m_Button))
+            $NEW.Add($Instr::Create($Op::Stloc,$L_bsB))
+            $NEW.Add($Instr::Create($Op::Ldloca_S,$L_bsB))
+            $NEW.Add($Instr::Create($Op::Ldfld,$fld_Clicked))
+            $NEW.Add($Instr::Create($Op::Brfalse,$lbl_after))
+            $NEW.Add($Instr::Create($Op::Ldc_I4_0)); $NEW.Add($Instr::Create($Op::Stsfld,$dropOpenRef))
+            $NEW.Add($Instr::Create($Op::Ldc_I4,[int]$mIdx)); $NEW.Add($Instr::Create($Op::Call,$setModeRef))
+            $NEW.Add($lbl_after)
         }
-        if($anchor -lt 0){ return @{ ok=$false; msg="FOV/Screen: якорь ShadowDistance (чекбокс) не найден." } }
+        & $optButton 0 { $NEW.Add($Instr::Create($Op::Ldc_R4,[float]3)) }
+        & $optButton 1 {
+            $NEW.Add($Instr::Create($Op::Ldc_R4,[float]3))
+            $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_mmb)); $NEW.Add($Instr::Create($Op::Ldc_I4_1)); $NEW.Add($Instr::Create($Op::Ldelem_Ref)); $NEW.Add($Instr::Create($Op::Callvirt,$m_getheight))
+            $NEW.Add($Instr::Create($Op::Ldc_I4_5)); $NEW.Add($Instr::Create($Op::Add)); $NEW.Add($Instr::Create($Op::Conv_R4)); $NEW.Add($Instr::Create($Op::Add))
+        }
+        & $optButton 2 {
+            $NEW.Add($Instr::Create($Op::Ldc_R4,[float]3))
+            $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_mmb)); $NEW.Add($Instr::Create($Op::Ldc_I4_1)); $NEW.Add($Instr::Create($Op::Ldelem_Ref)); $NEW.Add($Instr::Create($Op::Callvirt,$m_getheight))
+            $NEW.Add($Instr::Create($Op::Ldc_I4_5)); $NEW.Add($Instr::Create($Op::Add)); $NEW.Add($Instr::Create($Op::Ldc_I4_2)); $NEW.Add($Instr::Create($Op::Mul)); $NEW.Add($Instr::Create($Op::Conv_R4)); $NEW.Add($Instr::Create($Op::Add))
+        }
 
-        $seq=New-Object System.Collections.Generic.List[object]
-        $seq.Add($Instr::Create($Op::Ldarg_0))
-        $seq.Add($Instr::Create($Op::Ldfld,$guiField))
-        # чекбокс «Полный экран» — наверху, у строки разрешения (X=295, Y=64)
-        $seq.Add($Instr::Create($Op::Ldc_R4,[float]295))
-        $seq.Add($Instr::Create($Op::Ldc_R4,[float]64))
-        $seq.Add($Instr::Create($Op::Newobj,$vec2))
-        $seq.Add($Instr::Create($Op::Call,$isFs))
-        $seq.Add($Instr::Create($Op::Ldc_R4,[float]40))
-        $seq.Add($Instr::Create($Op::Ldc_R4,[float]0))
-        $seq.Add($Instr::Create($Op::Ldc_R4,[float]600))
-        $seq.Add($Instr::Create($Op::Ldc_R4,[float]50))
-        $seq.Add($Instr::Create($Op::Newobj,$rect))
-        $seq.Add($Instr::Create($Op::Newobj,$nullRect))
-        $seq.Add($Instr::Create($Op::Ldstr,"Полный экран"))
-        $seq.Add($Instr::Create($Op::Ldc_I4,[int]16))
-        $seq.Add($Instr::Create($Op::Ldstr,"#dfdfdf"))
-        $seq.Add($Instr::Create($Op::Ldc_I4_0))
-        $seq.Add($Instr::Create($Op::Callvirt,$checkBox))
-        $seq.Add($Instr::Create($Op::Call,$cbRes))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Callvirt,$m_EndGroup))
 
-        for($j=0;$j -lt $seq.Count;$j++){ $inst.Insert($anchor+1+$j,$seq[$j]) }
-        $m4.Body.KeepOldMaxStack=$false; $m4.Body.OptimizeBranches()
+        # закрытие списка по клику вне его области
+        $NEW.Add($Instr::Create($Op::Ldloca_S,$L_pos)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_v2x)); $NEW.Add($Instr::Create($Op::Ldc_R4,[float]5)); $NEW.Add($Instr::Create($Op::Sub))
+        $NEW.Add($Instr::Create($Op::Ldloca_S,$L_pos)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_v2y))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_mmb)); $NEW.Add($Instr::Create($Op::Ldc_I4_0)); $NEW.Add($Instr::Create($Op::Ldelem_Ref)); $NEW.Add($Instr::Create($Op::Callvirt,$m_getheight)); $NEW.Add($Instr::Create($Op::Conv_R4)); $NEW.Add($Instr::Create($Op::Add)); $NEW.Add($Instr::Create($Op::Ldc_R4,[float]4)); $NEW.Add($Instr::Create($Op::Add))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_sw)); $NEW.Add($Instr::Create($Op::Ldc_I4_4)); $NEW.Add($Instr::Create($Op::Ldelem_Ref)); $NEW.Add($Instr::Create($Op::Callvirt,$m_getwidth)); $NEW.Add($Instr::Create($Op::Ldc_I4_5)); $NEW.Add($Instr::Create($Op::Sub)); $NEW.Add($Instr::Create($Op::Conv_R4))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_sw)); $NEW.Add($Instr::Create($Op::Ldc_I4_4)); $NEW.Add($Instr::Create($Op::Ldelem_Ref)); $NEW.Add($Instr::Create($Op::Callvirt,$m_getheight)); $NEW.Add($Instr::Create($Op::Conv_R4))
+        $NEW.Add($Instr::Create($Op::Newobj,$ctor_Rect))
+        $NEW.Add($Instr::Create($Op::Stloc,$L_rect))
+        $L_afterClose = $Instr::Create($Op::Nop)
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui))
+        $NEW.Add($Instr::Create($Op::Ldloc,$L_rect))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_upper))
+        $NEW.Add($Instr::Create($Op::Ldarg_0)); $NEW.Add($Instr::Create($Op::Ldfld,$fld_gui)); $NEW.Add($Instr::Create($Op::Callvirt,$m_getcursor))
+        $NEW.Add($Instr::Create($Op::Callvirt,$m_inRect))
+        $NEW.Add($Instr::Create($Op::Brtrue,$L_afterClose))
+        $NEW.Add($Instr::Create($Op::Ldc_I4_0)); $NEW.Add($Instr::Create($Op::Call,$m_GetMouseDn))
+        $NEW.Add($Instr::Create($Op::Brfalse,$L_afterClose))
+        $NEW.Add($Instr::Create($Op::Ldc_I4_0)); $NEW.Add($Instr::Create($Op::Stsfld,$dropOpenRef))
+        $NEW.Add($L_afterClose)
+        $NEW.Add($L_end)
+
+        # --- перенос: блок stack-нейтрален. Вставляем ПЕРЕД первым из двух закрывающих EndGroup окна. ---
+        # Структура конца метода: ... EndGroup(окно) ; ldarg.0 ; ldfld gui ; EndGroup(окно) ; ret.
+        # Цель = первый (нижний по индексу) из этих двух EndGroup.
+        $inst=$m4.Body.Instructions
+        $retIdx=-1; for($k=$inst.Count-1;$k -ge 0;$k--){ if($inst[$k].OpCode.Name -eq "ret"){ $retIdx=$k; break } }
+        if($retIdx -lt 0){ return @{ ok=$false; msg="FOV/Screen: ret в SettingsGUI.InterfaceGUI не найден." } }
+        $egPre=@(); for($k=$retIdx-1;$k -ge 0 -and $egPre.Count -lt 2;$k--){ if("$($inst[$k].Operand)" -match "EndGroup"){ $egPre=@($k)+$egPre } }
+        if($egPre.Count -lt 2){ return @{ ok=$false; msg="FOV/Screen: два закрывающих EndGroup окна не найдены." } }
+        $targetObj=$inst[$egPre[0]]   # первый (внутренний) из двух EndGroup окна
+        $ti=$inst.IndexOf($targetObj)
+        for($j=0;$j -lt $NEW.Count;$j++){ $inst.Insert($ti+$j,$NEW[$j]) }
+        $m4.Body.SimplifyBranches()
+        $m4.Body.OptimizeBranches()
+        $m4.Body.KeepOldMaxStack=$false
+        $patched+="SettingsGUI.InterfaceGUI(dropdown)"
 
         # ===== запись модуля один раз =====
         $opts = New-Object dnlib.DotNet.Writer.ModuleWriterOptions($mod)
@@ -419,7 +580,7 @@ function Invoke-CWFovScreen {
 
         # Установка ключа fov по умолчанию не требуется здесь — ползунок читает GetInt,
         # а fov_step1 применяет фолбэк 90 при отсутствии ключа. $Fov сохраняем как дефолт слайдера.
-        return @{ ok=$true; msg="FOV-ползунок и переключатель экрана применены: $($patched -join ', ')."; bytes=$outBytes }
+        return @{ ok=$true; msg="FOV-ползунок и выбор режима экрана добавлены в настройки игры."; bytes=$outBytes }
     }
     finally {
         $mod.Dispose(); $scr.Dispose()
