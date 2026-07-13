@@ -181,7 +181,7 @@ if ($GUI) {
     $fontSmall = New-Object System.Drawing.Font("Segoe UI", 8.5)
 
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Contract Wars — Resolution Unlock"
+    $form.Text = "Contract Wars — Tweaks Patch"
     $form.ClientSize = New-Object System.Drawing.Size(560, 610)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = "FixedDialog"
@@ -199,7 +199,7 @@ if ($GUI) {
     $form.Controls.Add($lblTitle)
 
     $lblSub = New-Object System.Windows.Forms.Label
-    $lblSub.Text = "RESOLUTION UNLOCK — 2K / 4K / 8K"
+    $lblSub.Text = "TWEAKS — РАЗРЕШЕНИЕ · КЛИК · АВТОСПАВН"
     $lblSub.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 9)
     $lblSub.ForeColor = $clrMuted
     $lblSub.Location = New-Object System.Drawing.Point(20, 46)

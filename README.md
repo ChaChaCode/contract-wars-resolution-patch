@@ -1,6 +1,6 @@
 # Contract Wars — Tweaks Patch
 
-[![Download](https://img.shields.io/badge/%E2%AC%87%20%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC%20%2F%20DOWNLOAD-latest-c69c3c?style=for-the-badge)](https://github.com/ChaChaCode/contract-wars-resolution-patch/releases/latest/download/CW-Tweaks-Patch-v2.0.1.zip)
+[![Download](https://img.shields.io/badge/%E2%AC%87%20%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC%20%2F%20DOWNLOAD-latest-c69c3c?style=for-the-badge)](https://github.com/ChaChaCode/contract-wars-resolution-patch/releases/latest/download/CW-Tweaks-Patch-v2.0.2.zip)
 
 Набор улучшений для клиента Contract Wars. Патчи выбираются галочками в окне программы:
 
@@ -13,8 +13,10 @@
 ## Как пользоваться
 
 1. **[Скачать ZIP](https://github.com/ChaChaCode/contract-wars-resolution-patch/releases/latest)** → распаковать целиком (не запускать из архива).
-2. Запустить **`PATCH.bat`** → выбрать папку игры (находится сама) → отметить нужные патчи → **«ПРИМЕНИТЬ ПАТЧ»**.
+2. Запустить **`PATCH.vbs`** (открывается сразу окно, без чёрных консолей) → выбрать папку игры (находится сама) → отметить нужные патчи → **«ПРИМЕНИТЬ ПАТЧ»**.
 3. Запустить игру.
+
+*(`PATCH.bat` — запасной вариант запуска, если по `.vbs` не открывается.)*
 
 **Откат:** кнопка «Откатить» в окне (или `RESTORE.bat`) — возвращает оригинальный `Assembly-CSharp.dll` из бэкапа.
 
@@ -32,7 +34,7 @@
 
 ## Состав архива
 
-`PATCH.bat`, `RESTORE.bat`, `Patch-CWResolution.ps1`, `CWPatchCore.ps1`, `Diagnose.ps1`, `dnlib.dll` (нужна для патчей клика/автоспавна), `README.md`, `LICENSE`, `dnlib-LICENSE.txt`.
+`PATCH.vbs` (запуск без консолей), `PATCH.bat` (запасной запуск), `RESTORE.bat`, `Patch-CWResolution.ps1`, `CWPatchCore.ps1`, `Diagnose.ps1`, `dnlib.dll` (нужна для патчей клика/автоспавна), `README.md`, `LICENSE`, `dnlib-LICENSE.txt`.
 
 ## Дисклеймер
 
