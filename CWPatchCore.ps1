@@ -51,6 +51,9 @@ function Invoke-CWResolution {
 function Load-Dnlib($scriptDir) {
     $dn = Join-Path $scriptDir "dnlib.dll"
     if (-not (Test-Path $dn)) { throw "dnlib.dll не найдена рядом со скриптом ($dn)" }
+    # Windows помечает скачанные из интернета файлы (Zone.Identifier), из-за чего .NET
+    # отказывается загружать сборку (HRESULT 0x80131515). Снимаем метку со всех файлов патчера.
+    try { Get-ChildItem -Path $scriptDir -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue } catch { }
     Add-Type -Path $dn
 }
 function Get-InputMemberRef($mod, $name) {
