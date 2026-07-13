@@ -3,7 +3,7 @@
 # Removes the 1920x1080 resolution cap in the Contract Wars client (CWClient).
 #
 # Использование / Usage:
-#   PATCH.bat                                         # графическое окно (GUI)
+#   PATCH.vbs (в корне архива)                        # графическое окно без консолей (рекомендуется)
 #   .\Patch-CWResolution.ps1 -GUI                     # графическое окно (GUI)
 #   .\Patch-CWResolution.ps1                          # консоль: авто-поиск игры, потолок 7680x4320
 #   .\Patch-CWResolution.ps1 -GamePath "D:\CWClient"  # консоль: указать папку игры
@@ -24,8 +24,14 @@ function Find-GameDll {
     $candidates = @()
     if ($Hint) { $candidates += $Hint }
     $candidates += (Get-Location).Path
+    # скрипт лежит в engine\ — проверим саму engine и папки выше (patch может лежать в папке игры)
     $candidates += $PSScriptRoot
+    $d = $PSScriptRoot
+    for ($up = 0; $up -lt 3 -and $d; $up++) { $d = Split-Path -Parent $d; if ($d) { $candidates += $d } }
+    # типовые места установки
     $candidates += "C:\Games\CWClient"
+    $candidates += "C:\Program Files (x86)\CWClient"
+    $candidates += "C:\Program Files\CWClient"
     foreach ($c in $candidates) {
         if (-not $c) { continue }
         foreach ($rel in @("CWClient_Data\Managed\Assembly-CSharp.dll", "Managed\Assembly-CSharp.dll", "Assembly-CSharp.dll")) {
