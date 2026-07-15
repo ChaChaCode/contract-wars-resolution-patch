@@ -190,7 +190,7 @@ if ($GUI) {
 
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Contract Wars — Tweaks Patch"
-    $form.ClientSize = New-Object System.Drawing.Size(560, 664)
+    $form.ClientSize = New-Object System.Drawing.Size(560, 760)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = "FixedDialog"
     $form.MaximizeBox = $false
@@ -333,10 +333,50 @@ if ($GUI) {
     $chkNoBob.FlatStyle = "Flat"
     $form.Controls.Add($chkNoBob)
 
+    $chkNoWeather = New-Object System.Windows.Forms.CheckBox
+    $chkNoWeather.Text = "Убрать снег и лучи/блики солнца (не слепит)"
+    $chkNoWeather.Location = New-Object System.Drawing.Point(20, 344)
+    $chkNoWeather.Size = New-Object System.Drawing.Size(520, 22)
+    $chkNoWeather.Checked = $true
+    $chkNoWeather.ForeColor = $clrText
+    $chkNoWeather.BackColor = $clrBack
+    $chkNoWeather.FlatStyle = "Flat"
+    $form.Controls.Add($chkNoWeather)
+
+    $chkTracers = New-Object System.Windows.Forms.CheckBox
+    $chkTracers.Text = "Чёткие красные трассеры пуль (тонкая линия)"
+    $chkTracers.Location = New-Object System.Drawing.Point(20, 368)
+    $chkTracers.Size = New-Object System.Drawing.Size(520, 22)
+    $chkTracers.Checked = $true
+    $chkTracers.ForeColor = $clrText
+    $chkTracers.BackColor = $clrBack
+    $chkTracers.FlatStyle = "Flat"
+    $form.Controls.Add($chkTracers)
+
+    $chkRecoil = New-Object System.Windows.Forms.CheckBox
+    $chkRecoil.Text = "Стабильная отдача рук (прицел не прыгает в стороны)"
+    $chkRecoil.Location = New-Object System.Drawing.Point(20, 392)
+    $chkRecoil.Size = New-Object System.Drawing.Size(520, 22)
+    $chkRecoil.Checked = $true
+    $chkRecoil.ForeColor = $clrText
+    $chkRecoil.BackColor = $clrBack
+    $chkRecoil.FlatStyle = "Flat"
+    $form.Controls.Add($chkRecoil)
+
+    $chkNicks = New-Object System.Windows.Forms.CheckBox
+    $chkNicks.Text = "Никнеймы над игроками (красный враг / синий союзник)"
+    $chkNicks.Location = New-Object System.Drawing.Point(20, 416)
+    $chkNicks.Size = New-Object System.Drawing.Size(520, 22)
+    $chkNicks.Checked = $true
+    $chkNicks.ForeColor = $clrText
+    $chkNicks.BackColor = $clrBack
+    $chkNicks.FlatStyle = "Flat"
+    $form.Controls.Add($chkNicks)
+
     # --- Кнопки ---
     $btnPatch = New-Object System.Windows.Forms.Button
     $btnPatch.Text = "Применить патч"
-    $btnPatch.Location = New-Object System.Drawing.Point(20, 354)
+    $btnPatch.Location = New-Object System.Drawing.Point(20, 450)
     $btnPatch.Size = New-Object System.Drawing.Size(330, 46)
     $btnPatch.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 11)
     $btnPatch.FlatStyle = "Flat"
@@ -350,7 +390,7 @@ if ($GUI) {
 
     $btnRestore = New-Object System.Windows.Forms.Button
     $btnRestore.Text = "Откатить"
-    $btnRestore.Location = New-Object System.Drawing.Point(365, 354)
+    $btnRestore.Location = New-Object System.Drawing.Point(365, 450)
     $btnRestore.Size = New-Object System.Drawing.Size(175, 46)
     $btnRestore.FlatStyle = "Flat"
     $btnRestore.FlatAppearance.BorderSize = 1
@@ -367,12 +407,12 @@ if ($GUI) {
     $lblProgress.Text = ""
     $lblProgress.Font = $fontSmall
     $lblProgress.ForeColor = $clrMuted
-    $lblProgress.Location = New-Object System.Drawing.Point(20, 414)
+    $lblProgress.Location = New-Object System.Drawing.Point(20, 510)
     $lblProgress.AutoSize = $true
     $form.Controls.Add($lblProgress)
 
     $pbTrack = New-Object System.Windows.Forms.Panel
-    $pbTrack.Location = New-Object System.Drawing.Point(20, 436)
+    $pbTrack.Location = New-Object System.Drawing.Point(20, 532)
     $pbTrack.Size = New-Object System.Drawing.Size(520, 14)
     $pbTrack.BackColor = $clrPanel
     $form.Controls.Add($pbTrack)
@@ -389,7 +429,7 @@ if ($GUI) {
 
     # --- Журнал ---
     $txtLog = New-Object System.Windows.Forms.TextBox
-    $txtLog.Location = New-Object System.Drawing.Point(20, 462)
+    $txtLog.Location = New-Object System.Drawing.Point(20, 558)
     $txtLog.Size = New-Object System.Drawing.Size(520, 118)
     $txtLog.Multiline = $true
     $txtLog.ReadOnly = $true
@@ -407,7 +447,7 @@ if ($GUI) {
     # --- Нижняя панель: копирование лога + контакт ---
     $btnCopy = New-Object System.Windows.Forms.Button
     $btnCopy.Text = "Скопировать лог"
-    $btnCopy.Location = New-Object System.Drawing.Point(20, 590)
+    $btnCopy.Location = New-Object System.Drawing.Point(20, 686)
     $btnCopy.Size = New-Object System.Drawing.Size(150, 30)
     $btnCopy.FlatStyle = "Flat"
     $btnCopy.FlatAppearance.BorderSize = 1
@@ -429,7 +469,7 @@ if ($GUI) {
 
     $btnDiag = New-Object System.Windows.Forms.Button
     $btnDiag.Text = "Диагностика"
-    $btnDiag.Location = New-Object System.Drawing.Point(178, 590)
+    $btnDiag.Location = New-Object System.Drawing.Point(178, 686)
     $btnDiag.Size = New-Object System.Drawing.Size(120, 30)
     $btnDiag.FlatStyle = "Flat"
     $btnDiag.FlatAppearance.BorderSize = 1
@@ -445,7 +485,7 @@ if ($GUI) {
     $lblCopied.Text = ""
     $lblCopied.Font = $fontSmall
     $lblCopied.ForeColor = $clrOk
-    $lblCopied.Location = New-Object System.Drawing.Point(306, 597)
+    $lblCopied.Location = New-Object System.Drawing.Point(306, 693)
     $lblCopied.AutoSize = $true
     $form.Controls.Add($lblCopied)
 
@@ -454,7 +494,7 @@ if ($GUI) {
     $lblContactPre.Text = "Ошибка? Скопируйте лог и напишите:"
     $lblContactPre.Font = $fontSmall
     $lblContactPre.ForeColor = $clrMuted
-    $lblContactPre.Location = New-Object System.Drawing.Point(20, 634)
+    $lblContactPre.Location = New-Object System.Drawing.Point(20, 730)
     $lblContactPre.AutoSize = $true
     $form.Controls.Add($lblContactPre)
 
@@ -463,7 +503,7 @@ if ($GUI) {
     $lnkTg.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 8.5)
     $lnkTg.LinkColor = [System.Drawing.Color]::FromArgb(40, 100, 190)
     $lnkTg.ActiveLinkColor = [System.Drawing.Color]::FromArgb(30, 80, 160)
-    $lnkTg.Location = New-Object System.Drawing.Point(232, 634)
+    $lnkTg.Location = New-Object System.Drawing.Point(232, 730)
     $lnkTg.AutoSize = $true
     $lnkTg.Add_LinkClicked({ Start-Process "https://t.me/Moxy1337" })
     $form.Controls.Add($lnkTg)
@@ -486,7 +526,7 @@ if ($GUI) {
     $btnPatch.Add_Click({
         $dll = Get-DllFromForm
         if (-not $dll) { return }
-        if (-not ($chkRes.Checked -or $chkClick.Checked -or $chkAuto.Checked -or $chkFov.Checked)) {
+        if (-not ($chkRes.Checked -or $chkClick.Checked -or $chkAuto.Checked -or $chkFov.Checked -or $chkNoBob.Checked -or $chkNoWeather.Checked -or $chkTracers.Checked -or $chkRecoil.Checked -or $chkNicks.Checked)) {
             Add-Log "[!] Не выбран ни один патч. Отметьте галочку в разделе «Что патчить»."
             return
         }
@@ -618,6 +658,94 @@ if ($GUI) {
                 } catch {
                     $hadError = $true
                     Add-Log "[!] Ошибка отключения тряски: $($_.Exception.Message)"
+                }
+            }
+
+            # 3.6) СНЕГ + ЛУЧИ/БЛИКИ СОЛНЦА — пересобирает сборку, читает $dll заново.
+            if ($chkNoWeather.Checked) {
+                try {
+                    Load-Dnlib $cwScriptDir
+                    $lblProgress.Text = "Снег/солнце: пересборка сборки..."
+                    [System.Windows.Forms.Application]::DoEvents()
+                    $rw = Invoke-CWNoSnowSun -DllPath $dll
+                    if ($rw.ok) {
+                        [IO.File]::WriteAllBytes($dll, $rw.bytes)
+                        Add-Log "[+] $($rw.msg)"
+                        $applied += "Без снега/бликов"
+                    } else {
+                        Add-Log "[!] $($rw.msg)"
+                    }
+                } catch {
+                    $hadError = $true
+                    Add-Log "[!] Ошибка снег/солнце: $($_.Exception.Message)"
+                }
+            }
+
+            # 3.7) СВОЙ ВИДИМЫЙ ТРАССЕР — пересобирает сборку, читает $dll заново.
+            #      Требует CWTracer.dll (кладётся в Managed игры, как CWScreen.dll).
+            if ($chkTracers.Checked) {
+                try {
+                    Load-Dnlib $cwScriptDir
+                    $tracerDll = Join-Path $cwScriptDir "CWTracer.dll"
+                    if (-not (Test-Path $tracerDll)) {
+                        Add-Log "[!] CWTracer.dll не найдена рядом с патчером — трассер пропущен."
+                    } else {
+                        $lblProgress.Text = "Трассеры: пересборка сборки..."
+                        [System.Windows.Forms.Application]::DoEvents()
+                        $rt = Invoke-CWTracers -DllPath $dll -TracerDllPath $tracerDll
+                        if ($rt.ok) {
+                            [IO.File]::WriteAllBytes($dll, $rt.bytes)
+                            $managedDir = Split-Path -Parent $dll
+                            Copy-Item $tracerDll (Join-Path $managedDir "CWTracer.dll") -Force
+                            Add-Log "[+] $($rt.msg)"
+                            $applied += "Свой трассер"
+                        } else {
+                            Add-Log "[!] $($rt.msg)"
+                        }
+                    }
+                } catch {
+                    $hadError = $true
+                    Add-Log "[!] Ошибка трассеров: $($_.Exception.Message)"
+                }
+            }
+
+            # 3.8) СТАБИЛЬНАЯ ОТДАЧА РУК — пересобирает сборку, читает $dll заново.
+            if ($chkRecoil.Checked) {
+                try {
+                    Load-Dnlib $cwScriptDir
+                    $lblProgress.Text = "Отдача: пересборка сборки..."
+                    [System.Windows.Forms.Application]::DoEvents()
+                    $rr = Invoke-CWStableRecoil -DllPath $dll
+                    if ($rr.ok) {
+                        [IO.File]::WriteAllBytes($dll, $rr.bytes)
+                        Add-Log "[+] $($rr.msg)"
+                        $applied += "Стабильная отдача"
+                    } else {
+                        Add-Log "[!] $($rr.msg)"
+                    }
+                } catch {
+                    $hadError = $true
+                    Add-Log "[!] Ошибка отдачи: $($_.Exception.Message)"
+                }
+            }
+
+            # 3.9) НИКНЕЙМЫ ИГРОКОВ — пересобирает сборку, читает $dll заново.
+            if ($chkNicks.Checked) {
+                try {
+                    Load-Dnlib $cwScriptDir
+                    $lblProgress.Text = "Ники: пересборка сборки..."
+                    [System.Windows.Forms.Application]::DoEvents()
+                    $rn = Invoke-CWNicks -DllPath $dll
+                    if ($rn.ok) {
+                        [IO.File]::WriteAllBytes($dll, $rn.bytes)
+                        Add-Log "[+] $($rn.msg)"
+                        $applied += "Ники игроков"
+                    } else {
+                        Add-Log "[!] $($rn.msg)"
+                    }
+                } catch {
+                    $hadError = $true
+                    Add-Log "[!] Ошибка ников: $($_.Exception.Message)"
                 }
             }
 

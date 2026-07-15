@@ -250,6 +250,301 @@ function Invoke-CWNoBob {
     } finally { $mod.Dispose() }
 }
 
+# ---------- СНЕГ + ЛУЧИ/БЛИКИ СОЛНЦА ----------
+# 1) Снег: SnowFlakes.Update управляет видимостью снежинок (MeshRenderer.enabled).
+#    Переписываем Update так, чтобы он каждый кадр ВЫКЛЮЧАЛ все рендереры снежинок → снега нет.
+#    (Массив _flakesRenderers создаётся в Start; логика теплового прицела не ломается.)
+# 2) Лучи/блики солнца: SunOnGlass.OnRenderImage — пост-эффект, накладывающий солнце/лучи/блик
+#    на кадр (слепит). Заменяем тело на простое Graphics.Blit(source, destination) — картинка
+#    проходит без эффекта. LensFlares.Draw и VisibilityChecker больше не вызываются.
+# Принимает путь к DLL, ВОЗВРАЩАЕТ новые байты (@{ ok; bytes; msg }).
+function Invoke-CWNoSnowSun {
+    param([string]$DllPath)
+    if (-not (Test-Path $DllPath)) { return @{ ok=$false; msg="NoSnowSun: DLL не найдена: $DllPath" } }
+    $mod = [dnlib.DotNet.ModuleDefMD]::Load([IO.File]::ReadAllBytes($DllPath))
+    try {
+        $Op    = [dnlib.DotNet.Emit.OpCodes]
+        $Instr = [dnlib.DotNet.Emit.Instruction]
+        $done = @()
+
+        # ===== 1) СНЕГ: SnowFlakes.Update -> выключить все рендереры и выйти =====
+        $tSnow = $mod.Find("SnowFlakes", $true)
+        if ($tSnow) {
+            $mu = $tSnow.Methods | Where-Object { $_.Name -eq "Update" -and $_.HasBody }
+            $renderersField = $tSnow.Fields | Where-Object { $_.Name -eq "_flakesRenderers" } | Select-Object -First 1
+            # set_enabled(bool) на Renderer — берём ссылку из старого тела Update
+            $setEnabled = $null
+            if ($mu) { foreach ($x in $mu.Body.Instructions) { if ("$($x.Operand)" -match "Renderer::set_enabled") { $setEnabled = $x.Operand; break } } }
+            if ($mu -and $renderersField -and $setEnabled) {
+                $mu.Body.ExceptionHandlers.Clear()
+                $mu.Body.Variables.Clear()
+                $ins = $mu.Body.Instructions
+                $ins.Clear()
+                # for (int i=0; i<_flakesRenderers.Length; i++) _flakesRenderers[i].enabled = false;
+                $loc_i = New-Object dnlib.DotNet.Emit.Local($mod.CorLibTypes.Int32)
+                [void]$mu.Body.Variables.Add($loc_i)
+                $lblCond = $Instr::Create($Op::Ldloc_0)          # метка проверки условия
+                $lblBody = $Instr::Create($Op::Ldarg_0)          # метка тела цикла
+                # i = 0
+                [void]$ins.Add($Instr::Create($Op::Ldc_I4_0))
+                [void]$ins.Add($Instr::Create($Op::Stloc_0))
+                [void]$ins.Add($Instr::Create($Op::Br, $lblCond))
+                # тело: _flakesRenderers[i].enabled = false
+                [void]$ins.Add($lblBody)                          # ldarg.0
+                [void]$ins.Add($Instr::Create($Op::Ldfld, $renderersField))
+                [void]$ins.Add($Instr::Create($Op::Ldloc_0))
+                [void]$ins.Add($Instr::Create($Op::Ldelem_Ref))
+                [void]$ins.Add($Instr::Create($Op::Ldc_I4_0))
+                [void]$ins.Add($Instr::Create($Op::Callvirt, $setEnabled))
+                # i++
+                [void]$ins.Add($Instr::Create($Op::Ldloc_0))
+                [void]$ins.Add($Instr::Create($Op::Ldc_I4_1))
+                [void]$ins.Add($Instr::Create($Op::Add))
+                [void]$ins.Add($Instr::Create($Op::Stloc_0))
+                # cond: i < _flakesRenderers.Length
+                [void]$ins.Add($lblCond)                          # ldloc.0
+                [void]$ins.Add($Instr::Create($Op::Ldarg_0))
+                [void]$ins.Add($Instr::Create($Op::Ldfld, $renderersField))
+                [void]$ins.Add($Instr::Create($Op::Ldlen))
+                [void]$ins.Add($Instr::Create($Op::Conv_I4))
+                [void]$ins.Add($Instr::Create($Op::Blt, $lblBody))
+                [void]$ins.Add($Instr::Create($Op::Ret))
+                $mu.Body.KeepOldMaxStack = $false
+                $mu.Body.SimplifyBranches(); $mu.Body.OptimizeBranches()
+                $done += "снег"
+            }
+        }
+
+        # ===== 2) СОЛНЦЕ/ЛУЧИ/БЛИКИ: SunOnGlass.OnRenderImage -> Graphics.Blit(src, dest) =====
+        $tSun = $mod.Find("SunOnGlass", $true)
+        if ($tSun) {
+            $ri = $tSun.Methods | Where-Object { $_.Name -eq "OnRenderImage" -and $_.HasBody }
+            # 2-арг Graphics.Blit(Texture, RenderTexture) — уже есть в теле метода
+            $blit2 = $null
+            if ($ri) {
+                foreach ($x in $ri.Body.Instructions) {
+                    if ("$($x.Operand)" -match "Graphics::Blit" -and "$($x.Operand)" -notmatch "Material") { $blit2 = $x.Operand; break }
+                }
+            }
+            if ($ri -and $blit2) {
+                $ri.Body.ExceptionHandlers.Clear()
+                $ri.Body.Variables.Clear()
+                $ri.Body.Instructions.Clear()
+                [void]$ri.Body.Instructions.Add($Instr::Create($Op::Ldarg_1))   # source
+                [void]$ri.Body.Instructions.Add($Instr::Create($Op::Ldarg_2))   # destination
+                [void]$ri.Body.Instructions.Add($Instr::Create($Op::Call, $blit2))
+                [void]$ri.Body.Instructions.Add($Instr::Create($Op::Ret))
+                $ri.Body.KeepOldMaxStack = $false
+                $done += "лучи/блики солнца"
+            }
+        }
+
+        if ($done.Count -eq 0) { return @{ ok=$false; msg="Снег/солнце: подходящие методы не найдены (ничего не изменено)." } }
+
+        $opts = New-Object dnlib.DotNet.Writer.ModuleWriterOptions($mod)
+        $opts.MetadataOptions.Flags = [dnlib.DotNet.Writer.MetadataFlags]::PreserveAll
+        $ms = New-Object System.IO.MemoryStream
+        $mod.Write($ms, $opts)
+        return @{ ok=$true; bytes=$ms.ToArray(); msg="Отключено: $($done -join ', ')." }
+    } finally { $mod.Dispose() }
+}
+
+# ---------- СТАБИЛЬНАЯ ОТДАЧА РУК (предсказуемая, как в CS) ----------
+# При каждом выстреле Animations.PlayFire играет СЛУЧАЙНУЮ fire-анимацию: имя = "fire" +
+# CircleRandom.GetI() (случайный индекс). Из-за этого руки с оружием дёргает то влево, то
+# вправо хаотично, прицел теряется. Делаем CircleRandom.GetI() всегда возвращающим 1 →
+# каждый выстрел играет ОДНУ И ТУ ЖЕ анимацию отдачи, руки дёргает предсказуемо (вверх/назад),
+# прицел не «таскает» в стороны. GetI используется ТОЛЬКО для fireRand (3 метода стрельбы),
+# так что ничего постороннего не затрагивается. Разброс пуль (серверный) не трогаем.
+# Возвращает новые байты (@{ ok; bytes; msg }).
+function Invoke-CWStableRecoil {
+    param([string]$DllPath)
+    if (-not (Test-Path $DllPath)) { return @{ ok=$false; msg="Отдача: DLL не найдена: $DllPath" } }
+    $mod = [dnlib.DotNet.ModuleDefMD]::Load([IO.File]::ReadAllBytes($DllPath))
+    try {
+        $Op = [dnlib.DotNet.Emit.OpCodes]
+        $t = $mod.Find("CircleRandom", $true)
+        if (-not $t) { return @{ ok=$false; msg="Отдача: класс CircleRandom не найден (ничего не изменено)." } }
+        $m = $t.Methods | Where-Object { $_.Name -eq "GetI" -and $_.HasBody }
+        if (-not $m) { return @{ ok=$false; msg="Отдача: CircleRandom.GetI не найден." } }
+        # тело -> return 1 (всегда первая fire-анимация → одинаковая отдача каждый выстрел)
+        $m.Body.ExceptionHandlers.Clear()
+        $m.Body.Variables.Clear()
+        $m.Body.Instructions.Clear()
+        [void]$m.Body.Instructions.Add([dnlib.DotNet.Emit.Instruction]::Create($Op::Ldc_I4_1))
+        [void]$m.Body.Instructions.Add([dnlib.DotNet.Emit.Instruction]::Create($Op::Ret))
+        $m.Body.KeepOldMaxStack = $false
+
+        $opts = New-Object dnlib.DotNet.Writer.ModuleWriterOptions($mod)
+        $opts.MetadataOptions.Flags = [dnlib.DotNet.Writer.MetadataFlags]::PreserveAll
+        $ms = New-Object System.IO.MemoryStream
+        $mod.Write($ms, $opts)
+        return @{ ok=$true; bytes=$ms.ToArray(); msg="Отдача рук сделана стабильной (одинаковая анимация каждый выстрел)." }
+    } finally { $mod.Dispose() }
+}
+
+# ---------- НИКНЕЙМЫ ИГРОКОВ НАД ГОЛОВАМИ (красный=враг, синий=союзник) ----------
+# Игра уже рисует ник союзников через RadarGUI.DrawFriendEntityScreenspaceInfo (безопасно,
+# со всеми проверками разработчиков). Врагов штатно не показывает. Делаем через ЭТУ ЖЕ функцию:
+#   1) убираем внутренний guard "he is not a friend" (чтобы рисовала и врагов);
+#   2) перед выводом ника ставим цвет по параметру friendly: синий (свой) / красный (враг);
+#   3) в RadarGUI.GameGUI перенаправляем вызовы DrawEnemyEntityScreenspaceInfo на DrawFriend.
+# В дезматче IsTeam всегда false → все красные (штатная логика игры). Свой перебор игроков
+# НЕ используем — это давало нативный краш; здесь только правки внутри штатного кода.
+# Возвращает новые байты (@{ ok; bytes; msg }).
+function Invoke-CWNicks {
+    param([string]$DllPath)
+    if (-not (Test-Path $DllPath)) { return @{ ok=$false; msg="Ники: DLL не найдена: $DllPath" } }
+    $mod = [dnlib.DotNet.ModuleDefMD]::Load([IO.File]::ReadAllBytes($DllPath))
+    try {
+        $Op    = [dnlib.DotNet.Emit.OpCodes]
+        $Instr = [dnlib.DotNet.Emit.Instruction]
+        $rg = $mod.Find("RadarGUI", $true)
+        if (-not $rg) { return @{ ok=$false; msg="Ники: класс RadarGUI не найден (ничего не изменено)." } }
+        $df = $rg.Methods | Where-Object { $_.Name -eq "DrawFriendEntityScreenspaceInfo" -and $_.HasBody }
+        if (-not $df) { return @{ ok=$false; msg="Ники: DrawFriendEntityScreenspaceInfo не найден." } }
+
+        # ссылки Color::.ctor и UnityEngine.GUI::set_color — из тела этой же функции
+        $colorCtor = $null; $setColor = $null
+        foreach ($x in $df.Body.Instructions) {
+            if ("$($x.Operand)" -match "Color::\.ctor") { $colorCtor = $x.Operand }
+            if ("$($x.Operand)" -match "UnityEngine\.GUI::set_color") { $setColor = $x.Operand }
+        }
+        if (-not $colorCtor -or -not $setColor) { return @{ ok=$false; msg="Ники: ссылки Color/set_color не найдены." } }
+
+        $ins = $df.Body.Instructions
+
+        # (1) убрать guard "he is not a friend!"
+        $gi = -1
+        for ($i=0; $i -lt $ins.Count; $i++) { if ($ins[$i].OpCode.Name -eq "ldstr" -and "$($ins[$i].Operand)" -match "not a friend") { $gi = $i; break } }
+        if ($gi -ge 0) {
+            $brtrue = -1
+            for ($k=$gi-1; $k -ge $gi-4; $k--) { if ($ins[$k].OpCode.Name -match "brtrue") { $brtrue = $k; break } }
+            if ($brtrue -ge 0) {
+                $ins[$brtrue].OpCode = $Op::Br     # безусловно на нормальный код
+                if ($ins[$brtrue-1].OpCode.Name -match "ldarg") { $ins[$brtrue-1].OpCode = $Op::Nop; $ins[$brtrue-1].Operand = $null }
+                for ($k=$gi; $k -lt $gi+3 -and $k -lt $ins.Count; $k++) {
+                    if ($ins[$k].OpCode.Name -eq "ldstr" -or "$($ins[$k].Operand)" -match "LogError") { $ins[$k].OpCode = $Op::Nop; $ins[$k].Operand = $null }
+                }
+            }
+        }
+
+        # (2) перед ник-блоком вставить цвет по friendly (arg3): синий/красный
+        $nickLabel = -1
+        for ($i=0; $i -lt $ins.Count; $i++) {
+            if ("$($ins[$i].Operand)" -match "GUI::Label") {
+                for ($j=[Math]::Max(0,$i-25); $j -lt $i; $j++) { if ("$($ins[$j].Operand)" -match "get_Nick") { $nickLabel = $i; break } }
+                if ($nickLabel -ge 0) { break }
+            }
+        }
+        if ($nickLabel -lt 0) { return @{ ok=$false; msg="Ники: место вывода ника не найдено." } }
+        $blockStart = -1
+        for ($k=$nickLabel-1; $k -ge 0; $k--) { if ("$($ins[$k].Operand)" -match "set_alignment") { $blockStart = $k-2; break } }
+        if ($blockStart -lt 0) { return @{ ok=$false; msg="Ники: начало ник-блока не найдено." } }
+        $anchorObj = $ins[$blockStart]
+        $lblBlue = $Instr::Create($Op::Ldc_R4, [float]0.3)
+        $seq = @(
+            $Instr::Create($Op::Ldarg_3),
+            $Instr::Create($Op::Brtrue, $lblBlue),
+            $Instr::Create($Op::Ldc_R4, [float]1),    # красный: враг
+            $Instr::Create($Op::Ldc_R4, [float]0.2),
+            $Instr::Create($Op::Ldc_R4, [float]0.2),
+            $Instr::Create($Op::Ldc_R4, [float]1),
+            $Instr::Create($Op::Newobj, $colorCtor),
+            $Instr::Create($Op::Call, $setColor),
+            $Instr::Create($Op::Br, $anchorObj),
+            $lblBlue,                                  # синий: союзник (0.3,...)
+            $Instr::Create($Op::Ldc_R4, [float]0.5),
+            $Instr::Create($Op::Ldc_R4, [float]1),
+            $Instr::Create($Op::Ldc_R4, [float]1),
+            $Instr::Create($Op::Newobj, $colorCtor),
+            $Instr::Create($Op::Call, $setColor)
+        )
+        $ai = $ins.IndexOf($anchorObj)
+        for ($j=0; $j -lt $seq.Count; $j++) { $ins.Insert($ai+$j, $seq[$j]) }
+        $df.Body.KeepOldMaxStack = $false
+        $df.Body.SimplifyBranches(); $df.Body.OptimizeBranches()
+
+        # (3) GameGUI: DrawEnemy... -> DrawFriend...
+        $gg = $rg.Methods | Where-Object { $_.Name -eq "GameGUI" -and $_.HasBody }
+        $cnt = 0
+        if ($gg) {
+            foreach ($x in $gg.Body.Instructions) { if ("$($x.Operand)" -match "RadarGUI::DrawEnemyEntityScreenspaceInfo") { $x.Operand = $df; $cnt++ } }
+            $gg.Body.KeepOldMaxStack = $false
+        }
+
+        $opts = New-Object dnlib.DotNet.Writer.ModuleWriterOptions($mod)
+        $opts.MetadataOptions.Flags = [dnlib.DotNet.Writer.MetadataFlags]::PreserveAll
+        $ms = New-Object System.IO.MemoryStream
+        $mod.Write($ms, $opts)
+        return @{ ok=$true; bytes=$ms.ToArray(); msg="Ники игроков включены (красный=враг, синий=союзник; перенаправлено вызовов: $cnt)." }
+    } finally { $mod.Dispose() }
+}
+
+# ---------- СВОЙ ВИДИМЫЙ ТРАССЕР (ярко-красная 3D-линия через LineRenderer) ----------
+# Родной трассер игры (частицы) почти не виден. Рисуем собственную линию: в НАЧАЛО
+# Tracer.Create вставляем вызов CWTracer.Spawn(start, end) — внешний класс CWTracer
+# (CWTracer.dll кладётся в Managed игры) создаёт короткоживущую ярко-красную линию от
+# ствола к точке попадания. Родные частицы не трогаем (пусть остаются как есть).
+# Параметры Tracer.Create: arg0=start (Vector3), arg1=end (Vector3).
+# $TracerDllPath — путь к CWTracer.dll. Возвращает новые байты (@{ ok; bytes; msg }).
+function Invoke-CWTracers {
+    param([string]$DllPath, [string]$TracerDllPath)
+    if (-not (Test-Path $DllPath)) { return @{ ok=$false; msg="Трассеры: DLL не найдена: $DllPath" } }
+    if (-not $TracerDllPath -or -not (Test-Path $TracerDllPath)) { return @{ ok=$false; msg="Трассеры: CWTracer.dll не найдена рядом с патчером." } }
+    $mod = [dnlib.DotNet.ModuleDefMD]::Load([IO.File]::ReadAllBytes($DllPath))
+    $scr = [dnlib.DotNet.ModuleDefMD]::Load([IO.File]::ReadAllBytes($TracerDllPath))
+    try {
+        $Op    = [dnlib.DotNet.Emit.OpCodes]
+        $Instr = [dnlib.DotNet.Emit.Instruction]
+        $imp   = New-Object dnlib.DotNet.Importer($mod)
+
+        $t = $mod.Find("Tracer", $true)
+        if (-not $t) { return @{ ok=$false; msg="Трассеры: класс Tracer не найден (ничего не изменено)." } }
+        $m = $t.Methods | Where-Object { $_.Name -eq "Create" -and $_.HasBody }
+        if (-not $m) { return @{ ok=$false; msg="Трассеры: Tracer.Create не найден." } }
+
+        # ссылка на CWTracer.Spawn(Vector3, Vector3)
+        $cwt = $scr.Find("CWTracer", $true)
+        if (-not $cwt) { return @{ ok=$false; msg="Трассеры: класс CWTracer не найден в CWTracer.dll." } }
+        $spawn = $cwt.Methods | Where-Object { $_.Name -eq "Spawn" } | Select-Object -First 1
+        if (-not $spawn) { return @{ ok=$false; msg="Трассеры: CWTracer.Spawn не найден." } }
+        $spawnRef = $imp.Import($spawn)
+
+        # Вставляем в САМОЕ НАЧАЛО метода: CWTracer.Spawn(arg0, arg1);
+        # (start=arg0, end=arg1 — Tracer.Create статический, поэтому arg0/arg1 = параметры)
+        $ins = $m.Body.Instructions
+        $first = $ins[0]
+        $newList = @(
+            $Instr::Create($Op::Ldarg_0),
+            $Instr::Create($Op::Ldarg_1),
+            $Instr::Create($Op::Call, $spawnRef)
+        )
+        for ($j = 0; $j -lt $newList.Count; $j++) { $ins.Insert($j, $newList[$j]) }
+        $m.Body.KeepOldMaxStack = $false
+        $m.Body.SimplifyBranches(); $m.Body.OptimizeBranches()
+
+        $opts = New-Object dnlib.DotNet.Writer.ModuleWriterOptions($mod)
+        $opts.MetadataOptions.Flags = [dnlib.DotNet.Writer.MetadataFlags]::PreserveAll
+        $ms = New-Object System.IO.MemoryStream
+        $mod.Write($ms, $opts)
+        return @{ ok=$true; bytes=$ms.ToArray(); msg="Свой видимый трассер добавлен (ярко-красная линия от ствола к цели)." }
+    } finally { $mod.Dispose(); $scr.Dispose() }
+}
+
+# Хелперы для чтения/записи ldc.i4 (короткие и полные формы).
+function Get-LdcI4Value($inst) {
+    switch ($inst.OpCode.Name) {
+        "ldc.i4.0" { 0 } "ldc.i4.1" { 1 } "ldc.i4.2" { 2 } "ldc.i4.3" { 3 } "ldc.i4.4" { 4 }
+        "ldc.i4.5" { 5 } "ldc.i4.6" { 6 } "ldc.i4.7" { 7 } "ldc.i4.8" { 8 } "ldc.i4.m1" { -1 }
+        "ldc.i4.s" { [int]$inst.Operand } "ldc.i4" { [int]$inst.Operand } default { $null }
+    }
+}
+function Set-LdcI4($inst, $Op, [int]$val) {
+    if ($val -ge -128 -and $val -le 127) { $inst.OpCode = $Op::Ldc_I4_S; $inst.Operand = [sbyte]$val }
+    else { $inst.OpCode = $Op::Ldc_I4; $inst.Operand = [int]$val }
+}
+
 # ---------- ЛАУНЧЕР: запуск игры в окне без рамки (borderless) ----------
 # Патчит CWClientLauncher.exe: StartGameControl.StartGame ставит аргументы запуска игры.
 # Делаем так, чтобы аргументы ВСЕГДА содержали -popupwindow -screen-fullscreen 0 (borderless),
