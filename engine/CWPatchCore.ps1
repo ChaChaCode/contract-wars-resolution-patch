@@ -429,6 +429,25 @@ function Invoke-CWNicks {
             }
         }
 
+        # (1b) убрать ранние гейты, из-за которых ник рисовался только в hardcore + командном
+        #      режиме: get_HardcoreMode (brfalse→continue, иначе ret) и get_IsTeamGame (brtrue→continue,
+        #      иначе ret). Делаем оба перехода безусловными (всегда continue), ret занопливаем.
+        for ($i=0; $i -lt $ins.Count-2; $i++) {
+            $o = "$($ins[$i].Operand)"
+            if ($o -match "Peer::get_HardcoreMode" -and $ins[$i+1].OpCode.Name -match "brfalse") {
+                $tgt = $ins[$i+1].Operand
+                $ins[$i].OpCode = $Op::Nop; $ins[$i].Operand = $null
+                $ins[$i+1].OpCode = $Op::Br; $ins[$i+1].Operand = $tgt
+                if ($ins[$i+2].OpCode.Name -eq "ret") { $ins[$i+2].OpCode = $Op::Nop }
+            }
+            elseif ($o -match "Main::get_IsTeamGame" -and $ins[$i+1].OpCode.Name -match "brtrue") {
+                $tgt = $ins[$i+1].Operand
+                $ins[$i].OpCode = $Op::Nop; $ins[$i].Operand = $null
+                $ins[$i+1].OpCode = $Op::Br; $ins[$i+1].Operand = $tgt
+                if ($ins[$i+2].OpCode.Name -eq "ret") { $ins[$i+2].OpCode = $Op::Nop }
+            }
+        }
+
         # (2) перед ник-блоком вставить цвет по friendly (arg3): синий/красный
         $nickLabel = -1
         for ($i=0; $i -lt $ins.Count; $i++) {
